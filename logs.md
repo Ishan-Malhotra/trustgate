@@ -27,8 +27,14 @@
 - **Done:** Audit logger — in-memory + `data/audit-log.json` persistence
 - API: `GET /api/audit-log`, `GET /api/sellers`
 
+## Phase 6 — Frontend (Step 8)
+- **Done:** Chat panel with purchase requests + quick demo buttons
+- **Done:** Seller/score panel with tier colors and gaming seller badge
+- **Done:** Live audit log feed (refreshes after each request)
+- **Done:** User policy display (loaded from API / `userPolicy.ts`)
+- Works without API keys via `/api/evaluate` fallback when seller + amount are parsed
+
 ## Next up
-- Step 8: Frontend (chat, score panel, log feed, policy display)
 - Step 9: Full Razorpay failure path integration in agent flow
 
 ## Repository
