@@ -1,0 +1,112 @@
+# TrustGate — Project Brief & System Prompt
+
+## What we're building
+An AI buyer-agent that decides whether it's allowed to pay a given seller,
+based on a trust score computed from that seller's history, AND a set of
+user-defined spending rules. Both must approve before money moves.
+
+The decision isn't just displayed — it directly controls a real Razorpay
+test-mode payment:
+- High trust + within user rules   → authorize AND capture (buy normally)
+- Medium trust, OR over user's confirm-threshold → authorize ONLY, hold
+- Low trust, OR over user's hard max → refuse; no Razorpay call at all
+
+Trust also sets a SPENDING LIMIT, not just a yes/no gate: a medium-trust
+seller might be capped at a fixed amount even if the requested purchase
+exceeds it. The user's own rules apply on top of that, as a second,
+independent check — a high-trust seller can still get held if it crosses
+a rule the user set (e.g. "confirm anything over ₹300").
+
+## Tech stack
+- Next.js (App Router) + TypeScript
+- API routes for backend logic (no separate server)
+- Razorpay Node SDK, test-mode keys only
+- (a) the buyer-agent's reasoning/tool-use,
+  (b) turning score data into a human-readable explanation string
+- Simple JSON file or SQLite for seller data — no need for a real DB
+- Tailwind for any UI
+
+## Core data model
+Seller: {
+  id, name, category,              // grounded loosely in real Yelp businesses
+  account_age_days,
+  kyc_verified: boolean,
+  dispute_rate_history: number[],  // last N periods, most recent last
+  return_rate: number,
+  price_volatility: number,        // e.g. # price changes in last 7 days
+}
+
+UserPolicy: {
+  max_spend_per_transaction: number,
+  max_spend_per_seller: number,
+  confirm_above_amount: number,    // hold for confirmation above this, regardless of trust tier
+  hold_expiry_seconds: number,     // how long a "held" authorization waits before auto-resolving
+}
+
+## Build order (do NOT reorder — later steps depend on earlier ones working)
+1. Seed 6-8 sellers in JSON. Include ONE deliberately "gaming" seller whose
+   dispute_rate_history starts clean and then spikes — this is our
+   adversarial test case, keep it clearly commented in the data file.
+2. Write `scoreSeller(seller): { score: 0-100, tier: 'high'|'medium'|'low' }`
+   — pure function, deterministic, weight recent trend more than
+   historical average. No LLM here. Unit-testable in isolation.
+3. Write `getSpendLimit(tier, score): number | null` — null = unlimited,
+   0 = refuse, else a capped amount.
+4. Wire Razorpay test-mode: order creation, authorize-only flow, and
+   capture flow, as three small isolated functions we can call independently
+   before connecting them to any agent logic.
+5. Write the buyer-agent (AI, tool-use) with three tools:
+   `checkTrust(sellerId)`, `authorizeOrCapture(sellerId, amount, tier)`,
+   `refuse(sellerId, reason)`. Its system prompt encodes the policy: call
+   checkTrust before any payment tool, respect the returned spend limit,
+   never exceed it.
+5.5. Add `applyUserPolicy(decision, amount, userPolicy): finalDecision` —
+   a small function that runs AFTER the trust-tier decision and can
+   downgrade it (e.g. trust says "approve" but amount exceeds
+   confirm_above_amount → final decision becomes "hold"). The trust score
+   and the user policy are two independent gates; either can block or
+   soften an outcome, neither alone is sufficient to approve.
+6. Add the explanation layer: after scoreSeller and applyUserPolicy run,
+   one AI call turns the combined reasoning into a short human-readable
+   string ("held: trust score 82 (approve), but exceeds your ₹300
+   confirm threshold").
+7. Add structured audit logging — every checkTrust call, every policy
+   check, every payment action, every refusal, timestamped, human-readable,
+   appended to a visible log (file or in-memory array shown in UI).
+8. Frontend: chat box for purchase requests, seller/score panel, live log
+   feed, and a small visible display of the current user policy values
+   (doesn't need to be editable in the UI — a visible constant is fine).
+9. Handle ONE failure path explicitly: if the Razorpay call times out or
+   errors, retry once, then log it as a flagged/unresolved case rather than
+   crashing or silently succeeding.
+
+## Non-goals (explicitly do not build these — out of scope for the demo)
+- No multi-agent scoring pipeline (signal-gatherer / scorer / policy split
+  as separate LLM agents). One deterministic function + one LLM
+  explanation call is sufficient and more defensible.
+- No real seller onboarding/auth — sellers are static seed data.
+- No generic checkout UI — the chat-driven agent flow IS the product surface.
+- No settings UI for user policy — hardcoded config is fine, just make it
+  visibly editable-in-principle (a config object, clearly labeled).
+- No over-engineered "hold" state — a timer-based auto-resolve is enough,
+  no need for a full confirmation workflow UI.
+
+## What "done" looks like for the demo
+Running the app, typing a purchase request, and watching:
+1. Agent buys from a high-trust seller within policy — payment captured,
+   visible in Razorpay test dashboard.
+2. Agent caps or refuses a medium/low-trust seller in the same request,
+   with a printed reason.
+3. A HIGH-trust seller still gets held because the amount crosses the
+   user's own policy threshold — proving trust and user control are two
+   separate, both-enforced checks.
+4. Agent evaluates the gaming seller and its outcome (catches it or
+   doesn't) is visible and explainable from the log.
+5. Full audit log is visible and readable end to end, showing both the
+   trust-score reasoning and the policy-check reasoning per decision.
+
+Work in this order. Get a working (ugly) version of steps 1-7 before
+touching the frontend. Flag me before adding anything not listed above.
+
+- Always push to github after completing each step.
+- Maintain and edit a logs.md files for after completing each phase log it there.

@@ -1,36 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TrustGate
 
-## Getting Started
+AI buyer-agent that decides whether to pay a seller based on **trust scoring** and **user spending policy**, controlling real Razorpay test-mode payments.
 
-First, run the development server:
+## Quick start
 
 ```bash
+npm install
+cp .env.example .env.local   # add Razorpay test keys + OpenAI key
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## API (steps 1–7)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/sellers` | GET | List seeded sellers |
+| `/api/evaluate` | POST | `{ sellerId, amount, executePayment? }` — deterministic trust + policy |
+| `/api/purchase` | POST | `{ message }` — AI buyer agent |
+| `/api/audit-log` | GET | Full audit trail |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Example evaluate
 
-## Learn More
+```bash
+curl -X POST http://localhost:3000/api/evaluate \
+  -H 'Content-Type: application/json' \
+  -d '{"sellerId":"seller-001","amount":250}'
+```
 
-To learn more about Next.js, take a look at the following resources:
+Hold a high-trust seller over policy threshold:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+curl -X POST http://localhost:3000/api/evaluate \
+  -H 'Content-Type: application/json' \
+  -d '{"sellerId":"seller-002","amount":500}'
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Scripts
 
-## Deploy on Vercel
+- `npm run dev` — Next.js dev server
+- `npm run test` — Vitest unit tests
+- `npm run build` — Production build
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## User policy
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Configured in `src/lib/config/userPolicy.ts` (visible constant, editable in principle).
+
+## Build progress
+
+See [logs.md](./logs.md) for phase-by-phase status.

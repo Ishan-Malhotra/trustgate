@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# audit log (runtime generated)
+data/audit-log.json
 
 # vercel
 .vercel

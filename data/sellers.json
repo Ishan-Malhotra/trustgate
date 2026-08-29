@@ -1,0 +1,83 @@
+[
+  {
+    "id": "seller-001",
+    "name": "Spice Garden",
+    "category": "Indian Restaurant",
+    "account_age_days": 2200,
+    "kyc_verified": true,
+    "dispute_rate_history": [0.005, 0.008, 0.006, 0.007, 0.005],
+    "return_rate": 0.015,
+    "price_volatility": 1
+  },
+  {
+    "id": "seller-002",
+    "name": "Blue Bottle Coffee",
+    "category": "Coffee Shop",
+    "account_age_days": 2400,
+    "kyc_verified": true,
+    "dispute_rate_history": [0.002, 0.003, 0.002, 0.003, 0.002],
+    "return_rate": 0.008,
+    "price_volatility": 1
+  },
+  {
+    "id": "seller-003",
+    "name": "TechFix Mobile Repairs",
+    "category": "Electronics Repair",
+    "account_age_days": 540,
+    "kyc_verified": true,
+    "dispute_rate_history": [0.04, 0.05, 0.06, 0.05, 0.055],
+    "return_rate": 0.12,
+    "price_volatility": 4
+  },
+  {
+    "id": "seller-004",
+    "name": "Bargain Bazaar",
+    "category": "Discount Retail",
+    "account_age_days": 120,
+    "kyc_verified": false,
+    "dispute_rate_history": [0.08, 0.09, 0.1, 0.11, 0.12],
+    "return_rate": 0.25,
+    "price_volatility": 9
+  },
+  {
+    "id": "seller-005",
+    "name": "Fresh Farms Co-op",
+    "category": "Grocery",
+    "account_age_days": 960,
+    "kyc_verified": true,
+    "dispute_rate_history": [0.02, 0.025, 0.02, 0.018, 0.02],
+    "return_rate": 0.04,
+    "price_volatility": 3
+  },
+  {
+    "id": "seller-006",
+    "name": "QuickShip Gadgets",
+    "category": "Electronics",
+    "account_age_days": 365,
+    "kyc_verified": true,
+    "dispute_rate_history": [0.03, 0.035, 0.04, 0.038, 0.042],
+    "return_rate": 0.08,
+    "price_volatility": 6
+  },
+  {
+    "id": "seller-007",
+    "name": "Sunrise Bakery",
+    "category": "Bakery",
+    "account_age_days": 1100,
+    "kyc_verified": true,
+    "dispute_rate_history": [0.01, 0.012, 0.01, 0.011, 0.01],
+    "return_rate": 0.03,
+    "price_volatility": 2
+  },
+  {
+    "_comment": "ADVERSARIAL TEST CASE — gaming seller: dispute history looks clean early, then spikes sharply in recent periods. scoreSeller should weight recent periods heavily and downgrade trust.",
+    "id": "seller-gaming",
+    "name": "DealDash Express",
+    "category": "Flash Deals",
+    "account_age_days": 400,
+    "kyc_verified": true,
+    "dispute_rate_history": [0.01, 0.015, 0.02, 0.18, 0.42],
+    "return_rate": 0.15,
+    "price_volatility": 11
+  }
+]
