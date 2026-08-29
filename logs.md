@@ -30,3 +30,7 @@
 ## Next up
 - Step 8: Frontend (chat, score panel, log feed, policy display)
 - Step 9: Full Razorpay failure path integration in agent flow
+
+## Repository
+- GitHub: https://github.com/Ishan-Malhotra/trustgate
+- Pushed after steps 1–7 complete (commit `8e5a7fc`)
