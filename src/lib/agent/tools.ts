@@ -6,19 +6,22 @@ import { evaluateTrust } from "@/lib/trust/evaluateTrust";
 import { getSellerById } from "@/lib/sellers";
 import { logAudit } from "@/lib/audit/logger";
 import { executeApprovedPayment } from "@/lib/razorpay/executePayment";
-import type { FinalDecision } from "@/lib/types";
+import type { FinalDecision, SellerTrustCheck } from "@/lib/types";
 import type { PaymentExecutionResult } from "@/lib/razorpay/executePayment";
 
 export interface AgentContext {
   lastDecision?: FinalDecision;
   lastExplanation?: string;
   lastPayment?: PaymentExecutionResult;
+  chosenSellerId?: string;
+  decisionsBySellerId: Record<string, FinalDecision>;
+  trustChecks: SellerTrustCheck[];
 }
 
 export function createBuyerTools(ctx: AgentContext) {
   const checkTrust = tool({
     description:
-      "Check seller trust score and spending limit. MUST be called before any payment action.",
+      "Check seller trust score and spending limit. Call on EVERY relevant seller before choosing. MUST be called before any payment action.",
     inputSchema: z.object({
       sellerId: z.string(),
       amount: z.number().positive(),
@@ -38,6 +41,18 @@ export function createBuyerTools(ctx: AgentContext) {
       );
 
       ctx.lastDecision = finalDecision;
+      ctx.decisionsBySellerId[sellerId] = finalDecision;
+      ctx.trustChecks.push({
+        sellerId,
+        sellerName: seller.name,
+        amount,
+        score: finalDecision.score,
+        tier: finalDecision.tier,
+        spendLimit: finalDecision.spendLimit,
+        recommendedAction: finalDecision.action,
+        trustReason: finalDecision.trustReason,
+        policyReason: finalDecision.policyReason,
+      });
 
       logAudit("trust_check", `Trust check for ${seller.name}`, {
         sellerId,
@@ -86,12 +101,14 @@ export function createBuyerTools(ctx: AgentContext) {
         return { error: `Seller not found: ${sellerId}` };
       }
 
-      if (!ctx.lastDecision || ctx.lastDecision.tier === undefined) {
+      const decision = ctx.decisionsBySellerId[sellerId] ?? ctx.lastDecision;
+      if (!decision || decision.tier === undefined) {
         logAudit("error", "authorizeOrCapture called without prior checkTrust");
         return { error: "Must call checkTrust before payment" };
       }
 
-      const decision = ctx.lastDecision;
+      ctx.lastDecision = decision;
+      ctx.chosenSellerId = sellerId;
       const payAmount = decision.effectiveAmount;
 
       if (decision.spendLimit !== null && amount > decision.spendLimit) {

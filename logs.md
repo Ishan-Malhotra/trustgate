@@ -42,5 +42,13 @@
 - **Done:** No silent capture success — capture only runs on real `pay_` ids
 - **Tests:** `src/lib/razorpay/__tests__/retry.test.ts`
 
+## Phase 8 — Hide pre-decision scores; goal-based agent choice
+- **Done:** Seller panel is "Available Sellers" (name, category, listings/price only) until the agent evaluates
+- **Done:** Scores/tier/limit reveal in chat comparison + only for sellers checked in that request
+- **Done:** Dev mode toggle (off by default) reloads `/api/sellers?dev=1` with full scores for debugging
+- **Done:** Demo buttons are goal-based (no seller names). Phone-case cheapest listing is the gaming seller
+- **Done:** Agent prompt requires checkTrust on every relevant seller, then explain the price/trust tradeoff
+- **Done:** Payment tool uses per-seller trust decision (not just the last checkTrust)
+
 ## Repository
 - GitHub: https://github.com/Ishan-Malhotra/trustgate

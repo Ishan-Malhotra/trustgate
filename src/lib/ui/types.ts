@@ -2,14 +2,24 @@ import type {
   AuditEntry,
   FinalDecision,
   PaymentAction,
+  SellerListing,
+  SellerTrustCheck,
   TrustTier,
   UserPolicy,
 } from "@/lib/types";
 
-export interface ScoredSeller {
+export interface CatalogSeller {
   id: string;
   name: string;
   category: string;
+  known_for?: string[];
+  listings?: SellerListing[];
+  score?: number;
+  tier?: TrustTier;
+  spendLimit?: number | null;
+}
+
+export interface ScoredSeller extends CatalogSeller {
   account_age_days: number;
   kyc_verified: boolean;
   dispute_rate_history: number[];
@@ -27,10 +37,12 @@ export interface ChatMessage {
   decision?: FinalDecision;
   explanation?: string;
   payment?: Record<string, unknown>;
+  evaluatedSellers?: SellerTrustCheck[];
+  chosenSellerId?: string;
 }
 
 export interface SellersResponse {
-  sellers: ScoredSeller[];
+  sellers: CatalogSeller[];
   userPolicy: UserPolicy;
   llmConfigured?: boolean;
   anthropicWorkspaceConfigured?: boolean;
@@ -51,6 +63,8 @@ export interface PurchaseResponse {
   explanation?: string;
   decision?: FinalDecision;
   payment?: Record<string, unknown>;
+  evaluatedSellers?: SellerTrustCheck[];
+  chosenSellerId?: string;
   auditLog: AuditEntry[];
 }
 
@@ -102,19 +116,7 @@ export function formatInr(amount: number): string {
   return `₹${amount.toLocaleString("en-IN")}`;
 }
 
-export function parsePurchaseMessage(
-  message: string,
-  sellers: ScoredSeller[]
-): { sellerId?: string; amount?: number } {
-  const amountMatch = message.match(/₹?\s*(\d+(?:\.\d+)?)/);
-  const amount = amountMatch ? parseFloat(amountMatch[1]) : undefined;
-
-  const idMatch = message.match(/seller-[a-z0-9-]+/i);
-  if (idMatch) {
-    return { sellerId: idMatch[0].toLowerCase(), amount };
-  }
-
-  const lower = message.toLowerCase();
-  const seller = sellers.find((s) => lower.includes(s.name.toLowerCase()));
-  return { sellerId: seller?.id, amount };
+export function formatListings(listings?: SellerListing[]): string {
+  if (!listings?.length) return "Price on request";
+  return listings.map((l) => `${l.item} ${formatInr(l.price)}`).join(" · ");
 }

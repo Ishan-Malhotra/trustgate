@@ -12,27 +12,36 @@ function buildSystemPrompt(): string {
       const known = s.known_for?.length
         ? `; known for: ${s.known_for.join(", ")}`
         : "";
-      return `- ${s.id}: ${s.name} (${s.category}${known})`;
+      const listings = s.listings?.length
+        ? `; listings: ${s.listings.map((l) => `${l.item} ₹${l.price}`).join(", ")}`
+        : "";
+      return `- ${s.id}: ${s.name} (${s.category}${known}${listings})`;
     })
     .join("\n");
 
   return `You are TrustGate, an AI buyer-agent that controls payments on behalf of a user.
 
-POLICY (strict):
-1. ALWAYS call checkTrust(sellerId, amount) before any payment tool.
-2. NEVER call authorizeOrCapture if checkTrust recommends refuse.
-3. NEVER exceed the spend limit returned by checkTrust.
-4. If checkTrust recommends "hold", call authorizeOrCapture with action "hold".
-5. If checkTrust recommends "capture" and amount is within limits, call authorizeOrCapture with action "capture".
-6. If checkTrust recommends "refuse" or spend limit is 0, call refuse() instead — do NOT call Razorpay.
-7. Respect user policy outcomes embedded in checkTrust results.
-8. If the user does not specify an amount, pick a reasonable typical price in INR (default ₹180) and proceed.
-9. Map natural-language items to the best matching seller from the catalog (e.g. banana bread → Sunrise Bakery). Then call tools.
+Requests are GOAL-based (item + optional constraints). Do not treat a named seller as a skip-the-comparison shortcut.
 
-Seller catalog:
+HOW TO BUY:
+1. Filter the catalog to every seller whose category, known-for, or listings match the goal.
+2. Call checkTrust on EACH relevant seller (usually 2+). Use that seller's matching listing price as amount unless the user set a budget.
+3. Compare trust tier, listing price, spend limit, and user policy together. Do not pick on price alone.
+4. Choose one seller, or refuse the request if none clear the trust bar.
+5. Your final message MUST explain the tradeoff (e.g. "A was ₹50 cheaper but medium trust with rising disputes; chose B").
+
+POLICY (strict):
+1. ALWAYS call checkTrust(sellerId, amount) before any payment tool for that seller.
+2. NEVER call authorizeOrCapture if that seller's checkTrust recommends refuse.
+3. NEVER exceed the spend limit returned by checkTrust.
+4. If the chosen seller's checkTrust recommends "hold", call authorizeOrCapture with action "hold".
+5. If it recommends "capture" and amount is within limits, call authorizeOrCapture with action "capture".
+6. If all relevant sellers are refuse / spend limit 0, call refuse() — do NOT call Razorpay.
+7. Respect user policy outcomes embedded in checkTrust results (e.g. confirm_above_amount hold).
+
+Seller catalog (public listings only — trust is unknown until checkTrust):
 ${catalog}
 
-When the user mentions a seller by name, map it to the closest seller ID from the catalog.
 Amounts are in INR (₹).`;
 }
 
@@ -41,13 +50,18 @@ export interface PurchaseRequestResult {
   explanation?: string;
   decision?: AgentContext["lastDecision"];
   payment?: PaymentExecutionResult;
+  evaluatedSellers: AgentContext["trustChecks"];
+  chosenSellerId?: string;
   auditLog: ReturnType<typeof getAuditLog>;
 }
 
 export async function runBuyerAgent(
   userMessage: string
 ): Promise<PurchaseRequestResult> {
-  const ctx: AgentContext = {};
+  const ctx: AgentContext = {
+    decisionsBySellerId: {},
+    trustChecks: [],
+  };
   const tools = createBuyerTools(ctx);
 
   logAudit("agent", `User request: ${userMessage}`);
@@ -58,6 +72,7 @@ export async function runBuyerAgent(
     logAudit("error", message);
     return {
       response: message,
+      evaluatedSellers: [],
       auditLog: getAuditLog(),
     };
   }
@@ -69,7 +84,7 @@ export async function runBuyerAgent(
       system: buildSystemPrompt(),
       prompt: userMessage,
       tools,
-      stopWhen: stepCountIs(8),
+      stopWhen: stepCountIs(16),
     });
 
     responseText = text;
@@ -93,28 +108,26 @@ export async function runBuyerAgent(
       response: workspaceHint,
       decision: ctx.lastDecision,
       payment: ctx.lastPayment,
+      evaluatedSellers: ctx.trustChecks,
+      chosenSellerId: ctx.chosenSellerId,
       auditLog: getAuditLog(),
     };
   }
 
   let explanation: string | undefined;
   if (ctx.lastDecision) {
-    const sellerId = userMessage.match(/seller-[a-z0-9-]+/i)?.[0];
-    const named = getAllSellers().find((s) => {
-      const hay = userMessage.toLowerCase();
-      if (hay.includes(s.name.toLowerCase())) return true;
-      return s.known_for?.some((item) => hay.includes(item.toLowerCase()));
-    });
-    const seller = (sellerId ? getSellerById(sellerId) : undefined) ?? named;
-    const sellerName = seller?.name ?? "seller";
-    const amountMatch = userMessage.match(/₹?\s*(\d+(?:\.\d+)?)/);
-    const amount = amountMatch
-      ? parseFloat(amountMatch[1])
-      : ctx.lastDecision.effectiveAmount;
+    const chosenId = ctx.chosenSellerId;
+    const chosenSeller = chosenId ? getSellerById(chosenId) : undefined;
+    const chosenCheck = chosenId
+      ? ctx.trustChecks.find((c) => c.sellerId === chosenId)
+      : ctx.trustChecks[ctx.trustChecks.length - 1];
+    const sellerName = chosenSeller?.name ?? chosenCheck?.sellerName ?? "seller";
+    const amount = chosenCheck?.amount ?? ctx.lastDecision.effectiveAmount;
     explanation = await generateExplanation(
       sellerName,
       ctx.lastDecision,
-      amount
+      amount,
+      ctx.trustChecks
     );
     ctx.lastExplanation = explanation;
   }
@@ -124,6 +137,8 @@ export async function runBuyerAgent(
     explanation,
     decision: ctx.lastDecision,
     payment: ctx.lastPayment,
+    evaluatedSellers: ctx.trustChecks,
+    chosenSellerId: ctx.chosenSellerId,
     auditLog: getAuditLog(),
   };
 }

@@ -5,14 +5,13 @@ import { ChatPanel } from "@/components/ChatPanel";
 import { SellerPanel } from "@/components/SellerPanel";
 import { PolicyPanel } from "@/components/PolicyPanel";
 import { AuditLogPanel } from "@/components/AuditLogPanel";
-import type { AuditEntry, UserPolicy } from "@/lib/types";
+import type { AuditEntry, SellerTrustCheck, UserPolicy } from "@/lib/types";
 import type {
+  CatalogSeller,
   ChatMessage,
   PurchaseResponse,
-  ScoredSeller,
   SellersResponse,
 } from "@/lib/ui/types";
-import { parsePurchaseMessage } from "@/lib/ui/types";
 import { USER_POLICY } from "@/lib/config/userPolicy";
 
 function uid(): string {
@@ -20,19 +19,23 @@ function uid(): string {
 }
 
 export function TrustGateApp() {
-  const [sellers, setSellers] = useState<ScoredSeller[]>([]);
+  const [sellers, setSellers] = useState<CatalogSeller[]>([]);
   const [userPolicy, setUserPolicy] = useState<UserPolicy>(USER_POLICY);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
-  const [selectedSellerId, setSelectedSellerId] = useState<string>();
+  const [revealedById, setRevealedById] = useState<
+    Record<string, SellerTrustCheck>
+  >({});
+  const [chosenSellerId, setChosenSellerId] = useState<string>();
+  const [devMode, setDevMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [logLoading, setLogLoading] = useState(false);
   const [llmConfigured, setLlmConfigured] = useState(false);
   const [razorpayConfigured, setRazorpayConfigured] = useState(false);
   const [bootError, setBootError] = useState<string>();
 
-  const fetchSellers = useCallback(async () => {
-    const res = await fetch("/api/sellers");
+  const fetchSellers = useCallback(async (showScores: boolean) => {
+    const res = await fetch(showScores ? "/api/sellers?dev=1" : "/api/sellers");
     if (!res.ok) throw new Error("Failed to load sellers");
     const data: SellersResponse = await res.json();
     setSellers(data.sellers);
@@ -54,11 +57,19 @@ export function TrustGateApp() {
   }, []);
 
   useEffect(() => {
-    fetchSellers().catch((err) =>
+    fetchSellers(false).catch((err) =>
       setBootError(err instanceof Error ? err.message : "Boot failed")
     );
     fetchAuditLog();
   }, [fetchSellers, fetchAuditLog]);
+
+  const handleToggleDevMode = () => {
+    const next = !devMode;
+    setDevMode(next);
+    void fetchSellers(next).catch((err) =>
+      setBootError(err instanceof Error ? err.message : "Failed to reload sellers")
+    );
+  };
 
   async function runPurchase(message: string): Promise<PurchaseResponse> {
     const res = await fetch("/api/purchase", {
@@ -78,18 +89,24 @@ export function TrustGateApp() {
     ]);
 
     try {
-      const parsed = parsePurchaseMessage(message, sellers);
-      if (parsed.sellerId) setSelectedSellerId(parsed.sellerId);
-
       const agentResult = await runPurchase(message);
       const decision = agentResult.decision;
       const explanation = agentResult.explanation;
       const payment = agentResult.payment;
+      const evaluatedSellers = agentResult.evaluatedSellers ?? [];
+      const nextChosen = agentResult.chosenSellerId;
       const assistantContent =
-        agentResult.explanation ??
-        agentResult.response ??
+        agentResult.response ||
+        agentResult.explanation ||
         "Request processed.";
       if (agentResult.auditLog) setAuditLog(agentResult.auditLog);
+
+      const nextRevealed: Record<string, SellerTrustCheck> = {};
+      for (const check of evaluatedSellers) {
+        nextRevealed[check.sellerId] = check;
+      }
+      setRevealedById(nextRevealed);
+      setChosenSellerId(nextChosen);
 
       setMessages((prev) => [
         ...prev,
@@ -100,6 +117,8 @@ export function TrustGateApp() {
           decision,
           explanation,
           payment,
+          evaluatedSellers,
+          chosenSellerId: nextChosen,
         },
       ]);
     } catch (err) {
@@ -116,12 +135,6 @@ export function TrustGateApp() {
       setLoading(false);
       fetchAuditLog();
     }
-  }
-
-  function handleSelectSeller(seller: ScoredSeller) {
-    setSelectedSellerId(seller.id);
-    const message = `Buy ₹250 from ${seller.name}`;
-    void handleMessage(message);
   }
 
   if (bootError) {
@@ -165,7 +178,6 @@ export function TrustGateApp() {
             loading={loading}
             onSend={handleMessage}
             onQuickDemo={handleMessage}
-            sellers={sellers}
           />
         </div>
 
@@ -173,8 +185,10 @@ export function TrustGateApp() {
           <PolicyPanel policy={userPolicy} />
           <SellerPanel
             sellers={sellers}
-            selectedSellerId={selectedSellerId}
-            onSelectSeller={handleSelectSeller}
+            revealedById={revealedById}
+            chosenSellerId={chosenSellerId}
+            devMode={devMode}
+            onToggleDevMode={handleToggleDevMode}
           />
           <AuditLogPanel entries={auditLog} loading={logLoading} />
         </div>

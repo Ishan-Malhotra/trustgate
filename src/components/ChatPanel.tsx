@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ChatMessage, ScoredSeller } from "@/lib/ui/types";
+import type { ChatMessage } from "@/lib/ui/types";
 import {
   actionColor,
   actionLabel,
@@ -14,25 +14,24 @@ interface ChatPanelProps {
   loading: boolean;
   onSend: (message: string) => void;
   onQuickDemo: (message: string) => void;
-  sellers: ScoredSeller[];
 }
 
 const QUICK_DEMOS = [
   {
-    label: "Best banana bread",
-    message: "order the best banana bread",
+    label: "Cheapest banana bread",
+    message: "Get the cheapest banana bread you can find",
   },
   {
-    label: "Buy ₹250 — Blue Bottle",
-    message: "Buy lunch for ₹250 from Blue Bottle Coffee",
+    label: "Indian food, safely",
+    message: "Order Indian food, cheapest option that's safe to buy from",
   },
   {
-    label: "Buy ₹500 — Blue Bottle (hold)",
-    message: "Buy ₹500 from Blue Bottle Coffee",
+    label: "Phone case, best price",
+    message: "Buy a phone case, best price",
   },
   {
-    label: "Buy ₹200 — Gaming seller",
-    message: "Buy ₹200 from DealDash Express",
+    label: "Coffee tasting ~₹450",
+    message: "Get me a coffee tasting, around ₹450",
   },
 ];
 
@@ -44,13 +43,13 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
 
-  function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = input.trim();
     if (!trimmed || loading) return;
     onSend(trimmed);
     setInput("");
-  }
+  };
 
   return (
     <section className="flex min-h-0 flex-1 flex-col rounded-xl border border-zinc-800 bg-zinc-900/60">
@@ -59,15 +58,15 @@ export function ChatPanel({
           Purchase Request
         </h2>
         <p className="mt-1 text-xs text-zinc-500">
-          Ask to buy from any seller, e.g. &quot;Buy ₹250 from Blue Bottle
-          Coffee&quot;
+          Describe a goal, not a seller — e.g. &quot;Get me the best banana bread
+          you can find&quot;
         </p>
       </div>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
         {messages.length === 0 && (
           <div className="rounded-lg border border-dashed border-zinc-800 p-6 text-center text-sm text-zinc-500">
-            TrustGate evaluates seller trust and your spending policy before any
+            TrustGate compares relevant sellers on trust and price before any
             payment moves.
           </div>
         )}
@@ -86,31 +85,57 @@ export function ChatPanel({
             >
               <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
 
-              {msg.decision && (
-                <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-900/80 p-3 text-xs">
-                  <div className="flex flex-wrap gap-3">
-                    <span>
-                      Score:{" "}
-                      <strong className={tierColor(msg.decision.tier)}>
-                        {msg.decision.score}
-                      </strong>
-                    </span>
-                    <span>
-                      Tier:{" "}
-                      <strong className={tierColor(msg.decision.tier)}>
-                        {msg.decision.tier}
-                      </strong>
-                    </span>
-                    <span>
-                      Action:{" "}
-                      <strong className={actionColor(msg.decision.action)}>
-                        {actionLabel(msg.decision.action)}
-                      </strong>
-                    </span>
-                    {msg.decision.spendLimit !== null && (
-                      <span>Limit: {formatInr(msg.decision.spendLimit)}</span>
-                    )}
-                  </div>
+              {msg.evaluatedSellers && msg.evaluatedSellers.length > 0 && (
+                <div className="mt-3 space-y-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-3 text-xs">
+                  <p className="font-semibold uppercase tracking-wider text-zinc-500">
+                    Agent comparison
+                  </p>
+                  {msg.evaluatedSellers.map((check) => {
+                    const chosen = check.sellerId === msg.chosenSellerId;
+                    return (
+                      <div
+                        key={check.sellerId}
+                        className={`rounded-md border px-2 py-2 ${
+                          chosen
+                            ? "border-blue-500/40 bg-blue-500/10"
+                            : "border-zinc-800 bg-zinc-950/60"
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <span className="font-medium text-zinc-200">
+                            {check.sellerName}
+                            {chosen ? " · chosen" : ""}
+                          </span>
+                          <span className="text-zinc-400">
+                            {formatInr(check.amount)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-zinc-400">
+                          Trust{" "}
+                          <strong className={tierColor(check.tier)}>
+                            {check.score} ({check.tier})
+                          </strong>
+                          {" · "}
+                          <span className={actionColor(check.recommendedAction)}>
+                            {actionLabel(check.recommendedAction)}
+                          </span>
+                        </p>
+                      </div>
+                    );
+                  })}
+                  {msg.decision && (
+                    <div className="flex flex-wrap gap-3 pt-1 text-zinc-400">
+                      <span>
+                        Action:{" "}
+                        <strong className={actionColor(msg.decision.action)}>
+                          {actionLabel(msg.decision.action)}
+                        </strong>
+                      </span>
+                      {msg.decision.spendLimit !== null && (
+                        <span>Limit: {formatInr(msg.decision.spendLimit)}</span>
+                      )}
+                    </div>
+                  )}
                   {msg.explanation && (
                     <p className="mt-2 text-zinc-400">{msg.explanation}</p>
                   )}
@@ -135,6 +160,22 @@ export function ChatPanel({
                   )}
                 </div>
               )}
+              {(!msg.evaluatedSellers || msg.evaluatedSellers.length === 0) &&
+                (msg.decision || msg.payment) && (
+                  <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-900/80 p-3 text-xs text-zinc-400">
+                    {msg.decision && (
+                      <p>
+                        Action:{" "}
+                        <strong className={actionColor(msg.decision.action)}>
+                          {actionLabel(msg.decision.action)}
+                        </strong>
+                      </p>
+                    )}
+                    {msg.explanation && (
+                      <p className="mt-2">{msg.explanation}</p>
+                    )}
+                  </div>
+                )}
             </div>
           </div>
         ))}
@@ -142,7 +183,7 @@ export function ChatPanel({
         {loading && (
           <div className="flex justify-start">
             <div className="rounded-xl border border-zinc-800 bg-zinc-950/80 px-4 py-3 text-sm text-zinc-500">
-              Evaluating trust and policy…
+              Comparing relevant sellers…
             </div>
           </div>
         )}
@@ -155,6 +196,7 @@ export function ChatPanel({
               key={demo.label}
               type="button"
               disabled={loading}
+              aria-label={demo.label}
               onClick={() => onQuickDemo(demo.message)}
               className="rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200 disabled:opacity-50"
             >
@@ -168,8 +210,9 @@ export function ChatPanel({
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="order the best banana bread"
+            placeholder="Get me the best banana bread you can find"
             disabled={loading}
+            aria-label="Purchase goal"
             className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-blue-500 focus:outline-none disabled:opacity-50"
           />
           <button

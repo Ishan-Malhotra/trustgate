@@ -1,12 +1,13 @@
 import { generateText } from "ai";
-import type { FinalDecision } from "@/lib/types";
+import type { FinalDecision, SellerTrustCheck } from "@/lib/types";
 import { logAudit } from "@/lib/audit/logger";
 import { getAnthropicProvider } from "@/lib/config/anthropic";
 
 export async function generateExplanation(
   sellerName: string,
   decision: FinalDecision,
-  amount: number
+  amount: number,
+  comparison: SellerTrustCheck[] = []
 ): Promise<string> {
   const facts = {
     seller: sellerName,
@@ -18,6 +19,13 @@ export async function generateExplanation(
     finalAction: decision.action,
     originalAction: decision.originalAction,
     spendLimit: decision.spendLimit,
+    candidates: comparison.map((c) => ({
+      seller: c.sellerName,
+      amount: c.amount,
+      score: c.score,
+      tier: c.tier,
+      action: c.recommendedAction,
+    })),
   };
 
   const anthropic = getAnthropicProvider();
@@ -31,9 +39,9 @@ export async function generateExplanation(
     const { text } = await generateText({
       model: anthropic("claude-sonnet-4-5"),
       system:
-        "You explain TrustGate payment decisions in one short sentence. Be specific about trust score and policy. Use ₹ for amounts.",
+        "You explain TrustGate payment decisions in 1-3 short sentences. Compare candidates when more than one was evaluated (price vs trust). Be specific about scores and policy. Use ₹ for amounts.",
       prompt: `Explain this decision: ${JSON.stringify(facts)}`,
-      maxOutputTokens: 120,
+      maxOutputTokens: 220,
     });
 
     logAudit("agent", `Explanation: ${text}`, facts);
@@ -54,6 +62,12 @@ function buildFallbackExplanation(facts: {
   policyReason?: string;
   finalAction: string;
   originalAction: string;
+  candidates?: Array<{
+    seller: string;
+    amount: number;
+    score: number;
+    tier: string;
+  }>;
 }): string {
   const action =
     facts.finalAction === "capture"
@@ -63,6 +77,15 @@ function buildFallbackExplanation(facts: {
         : "refused";
 
   let msg = `${action}: ${facts.seller} — trust score ${facts.trustScore} (${facts.tier}), ₹${facts.amount}. ${facts.trustReason}`;
+  if (facts.candidates && facts.candidates.length > 1) {
+    const others = facts.candidates
+      .filter((c) => c.seller !== facts.seller)
+      .map((c) => `${c.seller}: ₹${c.amount}, trust ${c.score} (${c.tier})`)
+      .join("; ");
+    if (others) {
+      msg += ` Compared with ${others}.`;
+    }
+  }
   if (facts.policyReason) {
     msg += ` Policy: ${facts.policyReason}`;
   }

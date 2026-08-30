@@ -1,3 +1,8 @@
+export interface SellerListing {
+  item: string;
+  price: number;
+}
+
 export interface Seller {
   id: string;
   name: string;
@@ -9,6 +14,7 @@ export interface Seller {
   price_volatility: number;
   _comment?: string;
   known_for?: string[];
+  listings?: SellerListing[];
 }
 
 export type TrustTier = "high" | "medium" | "low";
@@ -48,6 +54,18 @@ export interface TrustDecision {
 export interface FinalDecision extends TrustDecision {
   policyReason?: string;
   originalAction: PaymentAction;
+}
+
+export interface SellerTrustCheck {
+  sellerId: string;
+  sellerName: string;
+  amount: number;
+  score: number;
+  tier: TrustTier;
+  spendLimit: number | null;
+  recommendedAction: PaymentAction;
+  trustReason: string;
+  policyReason?: string;
 }
 
 export interface AuditEntry {

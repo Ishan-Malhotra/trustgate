@@ -8,7 +8,11 @@
     "dispute_rate_history": [0.005, 0.008, 0.006, 0.007, 0.005],
     "return_rate": 0.015,
     "price_volatility": 1,
-    "known_for": ["indian food", "butter chicken", "naan"]
+    "known_for": ["indian food", "butter chicken", "naan"],
+    "listings": [
+      { "item": "indian food thali", "price": 280 },
+      { "item": "butter chicken", "price": 320 }
+    ]
   },
   {
     "id": "seller-002",
@@ -19,7 +23,11 @@
     "dispute_rate_history": [0.002, 0.003, 0.002, 0.003, 0.002],
     "return_rate": 0.008,
     "price_volatility": 1,
-    "known_for": ["coffee", "latte", "espresso"]
+    "known_for": ["coffee", "latte", "espresso"],
+    "listings": [
+      { "item": "latte", "price": 180 },
+      { "item": "coffee tasting", "price": 450 }
+    ]
   },
   {
     "id": "seller-003",
@@ -30,7 +38,10 @@
     "dispute_rate_history": [0.04, 0.05, 0.06, 0.05, 0.055],
     "return_rate": 0.12,
     "price_volatility": 4,
-    "known_for": ["phone repair", "screen replacement"]
+    "known_for": ["phone repair", "screen replacement"],
+    "listings": [
+      { "item": "screen replacement", "price": 1200 }
+    ]
   },
   {
     "id": "seller-004",
@@ -41,7 +52,12 @@
     "dispute_rate_history": [0.08, 0.09, 0.1, 0.11, 0.12],
     "return_rate": 0.25,
     "price_volatility": 9,
-    "known_for": ["discount retail", "cheap gadgets"]
+    "known_for": ["discount retail", "cheap gadgets", "banana bread", "phone case", "indian food"],
+    "listings": [
+      { "item": "banana bread", "price": 95 },
+      { "item": "phone case", "price": 149 },
+      { "item": "indian meal kit", "price": 140 }
+    ]
   },
   {
     "id": "seller-005",
@@ -52,7 +68,11 @@
     "dispute_rate_history": [0.02, 0.025, 0.02, 0.018, 0.02],
     "return_rate": 0.04,
     "price_volatility": 3,
-    "known_for": ["groceries", "produce", "fruit"]
+    "known_for": ["groceries", "produce", "fruit", "banana bread"],
+    "listings": [
+      { "item": "banana bread", "price": 185 },
+      { "item": "fruit basket", "price": 220 }
+    ]
   },
   {
     "id": "seller-006",
@@ -63,7 +83,11 @@
     "dispute_rate_history": [0.03, 0.035, 0.04, 0.038, 0.042],
     "return_rate": 0.08,
     "price_volatility": 6,
-    "known_for": ["gadgets", "electronics", "chargers"]
+    "known_for": ["gadgets", "electronics", "chargers", "phone case"],
+    "listings": [
+      { "item": "phone case", "price": 249 },
+      { "item": "charger", "price": 199 }
+    ]
   },
   {
     "id": "seller-007",
@@ -74,7 +98,11 @@
     "dispute_rate_history": [0.01, 0.012, 0.01, 0.011, 0.01],
     "return_rate": 0.03,
     "price_volatility": 2,
-    "known_for": ["banana bread", "pastries", "cakes", "bakery"]
+    "known_for": ["banana bread", "pastries", "cakes", "bakery"],
+    "listings": [
+      { "item": "banana bread", "price": 250 },
+      { "item": "pastries", "price": 160 }
+    ]
   },
   {
     "_comment": "ADVERSARIAL TEST CASE — gaming seller: dispute history looks clean early, then spikes sharply in recent periods. scoreSeller should weight recent periods heavily and downgrade trust.",
@@ -86,6 +114,10 @@
     "dispute_rate_history": [0.01, 0.015, 0.02, 0.18, 0.42],
     "return_rate": 0.15,
     "price_volatility": 11,
-    "known_for": ["flash deals", "too-good-to-be-true offers"]
+    "known_for": ["flash deals", "too-good-to-be-true offers", "phone case"],
+    "listings": [
+      { "item": "phone case", "price": 89 },
+      { "item": "flash gadget", "price": 99 }
+    ]
   }
 ]
