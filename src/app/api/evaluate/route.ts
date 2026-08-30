@@ -6,13 +6,7 @@ import { applyUserPolicy } from "@/lib/policy/applyUserPolicy";
 import { USER_POLICY } from "@/lib/config/userPolicy";
 import { generateExplanation } from "@/lib/explanation/generateExplanation";
 import { logAudit, getAuditLog } from "@/lib/audit/logger";
-import {
-  createOrder,
-  authorizeOnly,
-  capturePayment,
-  withRazorpayRetry,
-  isRazorpayConfigured,
-} from "@/lib/razorpay";
+import { executeApprovedPayment } from "@/lib/razorpay/executePayment";
 
 const bodySchema = z.object({
   sellerId: z.string(),
@@ -62,47 +56,13 @@ export async function POST(request: Request) {
   let payment: Record<string, unknown> | undefined;
 
   if (executePayment && finalDecision.action !== "refuse") {
-    const payAmount = finalDecision.effectiveAmount;
-
-    if (!isRazorpayConfigured()) {
-      payment = {
-        mode: "mock",
-        status: finalDecision.action === "capture" ? "captured" : "authorized",
-        amount: payAmount,
-      };
-      logAudit("payment", `Mock payment for ${seller.name}`, payment);
-    } else {
-      const receipt = `tg-eval-${sellerId}-${Date.now()}`;
-      const orderResult = await withRazorpayRetry("createOrder", () =>
-        createOrder(payAmount, receipt)
-      );
-
-      if (!orderResult.success) {
-        logAudit("error", orderResult.error ?? "Order failed", {
-          flagged: orderResult.flagged,
-        });
-        payment = { error: orderResult.error, flagged: orderResult.flagged };
-      } else {
-        const authResult = await withRazorpayRetry("authorizeOnly", () =>
-          authorizeOnly(orderResult.data!.orderId, payAmount)
-        );
-
-        if (!authResult.success) {
-          payment = { error: authResult.error, flagged: authResult.flagged };
-        } else if (finalDecision.action === "capture") {
-          const cap = await withRazorpayRetry("capturePayment", () =>
-            capturePayment(authResult.data!.paymentId, payAmount)
-          );
-          payment = cap.success
-            ? { ...cap.data, orderId: orderResult.data!.orderId }
-            : { error: cap.error, flagged: cap.flagged };
-        } else {
-          payment = { ...authResult.data, held: true };
-        }
-
-        logAudit("payment", `Payment result for ${seller.name}`, payment);
-      }
-    }
+    const paymentResult = await executeApprovedPayment({
+      sellerId,
+      sellerName: seller.name,
+      amount: finalDecision.effectiveAmount,
+      action: finalDecision.action,
+    });
+    payment = { ...paymentResult };
   } else if (finalDecision.action === "refuse") {
     logAudit("refusal", `Refused ${seller.name}: ${explanation}`, {
       sellerId,

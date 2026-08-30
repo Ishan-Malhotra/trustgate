@@ -26,6 +26,7 @@ export interface ChatMessage {
   content: string;
   decision?: FinalDecision;
   explanation?: string;
+  payment?: Record<string, unknown>;
 }
 
 export interface SellersResponse {
@@ -46,6 +47,7 @@ export interface PurchaseResponse {
   response: string;
   explanation?: string;
   decision?: FinalDecision;
+  payment?: Record<string, unknown>;
   auditLog: AuditEntry[];
 }
 

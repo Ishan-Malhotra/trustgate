@@ -10,12 +10,10 @@ export async function capturePayment(
   paymentId: string,
   amountInr: number
 ): Promise<CaptureResult> {
-  if (paymentId.startsWith("auth_pending_") || paymentId.startsWith("pay_mock_")) {
-    return {
-      paymentId,
-      status: "captured",
-      capturedAmount: amountInr,
-    };
+  if (!paymentId.startsWith("pay_")) {
+    throw new Error(
+      `Cannot capture: ${paymentId} is not a Razorpay payment id`
+    );
   }
 
   const razorpay = getRazorpayClient();

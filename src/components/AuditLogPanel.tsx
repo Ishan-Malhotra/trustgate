@@ -15,6 +15,7 @@ const TYPE_STYLES: Record<AuditEntry["type"], string> = {
   refusal: "text-red-400",
   error: "text-orange-400",
   agent: "text-zinc-300",
+  flagged: "text-orange-300",
 };
 
 function formatTime(iso: string): string {
@@ -52,7 +53,11 @@ export function AuditLogPanel({ entries, loading }: AuditLogPanelProps) {
           entries.map((entry) => (
             <div
               key={entry.id}
-              className="rounded-lg border border-zinc-800/80 bg-zinc-950/60 px-3 py-2"
+              className={`rounded-lg border px-3 py-2 ${
+                entry.type === "flagged"
+                  ? "border-orange-500/40 bg-orange-950/40"
+                  : "border-zinc-800/80 bg-zinc-950/60"
+              }`}
             >
               <div className="flex items-center gap-2 text-zinc-600">
                 <span>{formatTime(entry.timestamp)}</span>

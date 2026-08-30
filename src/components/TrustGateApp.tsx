@@ -64,7 +64,7 @@ export function TrustGateApp() {
     const res = await fetch("/api/evaluate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sellerId, amount }),
+      body: JSON.stringify({ sellerId, amount, executePayment: true }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -95,18 +95,21 @@ export function TrustGateApp() {
       let assistantContent: string;
       let decision: EvaluateResponse["decision"] | undefined;
       let explanation: string | undefined;
+      let payment: Record<string, unknown> | undefined;
 
       if (parsed.sellerId && parsed.amount) {
         setSelectedSellerId(parsed.sellerId);
         const result = await runEvaluate(parsed.sellerId, parsed.amount);
         decision = result.decision;
         explanation = result.explanation;
+        payment = result.payment;
         assistantContent = result.explanation;
         if (result.auditLog) setAuditLog(result.auditLog);
       } else {
         const agentResult = await runPurchase(message);
         decision = agentResult.decision;
         explanation = agentResult.explanation;
+        payment = agentResult.payment;
         assistantContent =
           agentResult.explanation ??
           agentResult.response ??
@@ -122,6 +125,7 @@ export function TrustGateApp() {
           content: assistantContent,
           decision,
           explanation,
+          payment,
         },
       ]);
     } catch (err) {

@@ -2,10 +2,16 @@ import { generateText, stepCountIs } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { createBuyerTools, type AgentContext } from "./tools";
 import { generateExplanation } from "@/lib/explanation/generateExplanation";
-import { getSellerById } from "@/lib/sellers";
-import { logAudit } from "@/lib/audit/logger";
+import { getAllSellers, getSellerById } from "@/lib/sellers";
+import { logAudit, getAuditLog } from "@/lib/audit/logger";
+import type { PaymentExecutionResult } from "@/lib/razorpay/executePayment";
 
-const SYSTEM_PROMPT = `You are TrustGate, an AI buyer-agent that controls payments on behalf of a user.
+function buildSystemPrompt(): string {
+  const catalog = getAllSellers()
+    .map((s) => `- ${s.id}: ${s.name} (${s.category})`)
+    .join("\n");
+
+  return `You are TrustGate, an AI buyer-agent that controls payments on behalf of a user.
 
 POLICY (strict):
 1. ALWAYS call checkTrust(sellerId, amount) before any payment tool.
@@ -16,14 +22,19 @@ POLICY (strict):
 6. If checkTrust recommends "refuse" or spend limit is 0, call refuse() instead — do NOT call Razorpay.
 7. Respect user policy outcomes embedded in checkTrust results.
 
+Seller catalog:
+${catalog}
+
 When the user mentions a seller by name, map it to the closest seller ID from the catalog.
 Amounts are in INR (₹).`;
+}
 
 export interface PurchaseRequestResult {
   response: string;
   explanation?: string;
   decision?: AgentContext["lastDecision"];
-  auditLog: ReturnType<typeof import("@/lib/audit/logger").getAuditLog>;
+  payment?: PaymentExecutionResult;
+  auditLog: ReturnType<typeof getAuditLog>;
 }
 
 export async function runBuyerAgent(
@@ -34,45 +45,62 @@ export async function runBuyerAgent(
 
   logAudit("agent", `User request: ${userMessage}`);
 
-  let responseText: string;
-
   if (!process.env.OPENAI_API_KEY) {
-    responseText =
-      "OpenAI API key not configured. Use POST /api/evaluate with sellerId and amount for deterministic evaluation.";
     return {
-      response: responseText,
-      auditLog: (await import("@/lib/audit/logger")).getAuditLog(),
+      response:
+        "OpenAI API key not configured. Use POST /api/evaluate with sellerId and amount for deterministic evaluation.",
+      auditLog: getAuditLog(),
     };
   }
 
-  const { text, steps } = await generateText({
-    model: openai("gpt-4o-mini"),
-    system: SYSTEM_PROMPT,
-    prompt: userMessage,
-    tools,
-    stopWhen: stepCountIs(6),
-  });
+  let responseText: string;
 
-  responseText = text;
+  try {
+    const { text, steps } = await generateText({
+      model: openai("gpt-4o-mini"),
+      system: buildSystemPrompt(),
+      prompt: userMessage,
+      tools,
+      stopWhen: stepCountIs(6),
+    });
 
-  for (const step of steps) {
-    if (step.toolCalls) {
-      for (const call of step.toolCalls) {
-        logAudit("agent", `Tool call: ${call.toolName}`, {
-          input: call.input,
-        });
+    responseText = text;
+
+    for (const step of steps) {
+      if (step.toolCalls) {
+        for (const call of step.toolCalls) {
+          logAudit("agent", `Tool call: ${call.toolName}`, {
+            input: call.input,
+          });
+        }
       }
     }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logAudit("error", `Buyer agent failed: ${message}`);
+    return {
+      response: `Agent error: ${message}`,
+      decision: ctx.lastDecision,
+      payment: ctx.lastPayment,
+      auditLog: getAuditLog(),
+    };
   }
 
   let explanation: string | undefined;
   if (ctx.lastDecision) {
     const sellerId = userMessage.match(/seller-[a-z0-9-]+/i)?.[0];
-    const seller = sellerId ? getSellerById(sellerId) : undefined;
+    const named = getAllSellers().find((s) =>
+      userMessage.toLowerCase().includes(s.name.toLowerCase())
+    );
+    const seller = (sellerId ? getSellerById(sellerId) : undefined) ?? named;
     const sellerName = seller?.name ?? "seller";
     const amountMatch = userMessage.match(/₹?\s*(\d+(?:\.\d+)?)/);
     const amount = amountMatch ? parseFloat(amountMatch[1]) : 0;
-    explanation = await generateExplanation(sellerName, ctx.lastDecision, amount);
+    explanation = await generateExplanation(
+      sellerName,
+      ctx.lastDecision,
+      amount
+    );
     ctx.lastExplanation = explanation;
   }
 
@@ -80,6 +108,7 @@ export async function runBuyerAgent(
     response: responseText,
     explanation,
     decision: ctx.lastDecision,
-    auditLog: (await import("@/lib/audit/logger")).getAuditLog(),
+    payment: ctx.lastPayment,
+    auditLog: getAuditLog(),
   };
 }

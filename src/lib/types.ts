@@ -58,7 +58,8 @@ export interface AuditEntry {
     | "payment"
     | "refusal"
     | "error"
-    | "agent";
+    | "agent"
+    | "flagged";
   message: string;
   details?: Record<string, unknown>;
 }

@@ -14,6 +14,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "message is required" }, { status: 400 });
   }
 
-  const result = await runBuyerAgent(parsed.data.message);
-  return NextResponse.json(result);
+  try {
+    const result = await runBuyerAgent(parsed.data.message);
+    return NextResponse.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      { error: message, flagged: true },
+      { status: 500 }
+    );
+  }
 }

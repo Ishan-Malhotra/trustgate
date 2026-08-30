@@ -34,9 +34,12 @@
 - **Done:** User policy display (loaded from API / `userPolicy.ts`)
 - Works without API keys via `/api/evaluate` fallback when seller + amount are parsed
 
-## Next up
-- Step 9: Full Razorpay failure path integration in agent flow
+## Phase 7 — Razorpay failure path (Step 9)
+- **Done:** 8s timeout on Razorpay calls, retry once, then `flagged` unresolved audit entry
+- **Done:** Shared `executeApprovedPayment()` used by evaluate API and agent tools
+- **Done:** Chat now sends `executePayment: true` so approved/held requests hit Razorpay
+- **Done:** No silent capture success — capture only runs on real `pay_` ids
+- **Tests:** `src/lib/razorpay/__tests__/retry.test.ts`
 
 ## Repository
 - GitHub: https://github.com/Ishan-Malhotra/trustgate
-- Pushed after steps 1–7 complete (commit `8e5a7fc`)

@@ -5,18 +5,14 @@ import { applyUserPolicy } from "@/lib/policy/applyUserPolicy";
 import { evaluateTrust } from "@/lib/trust/evaluateTrust";
 import { getSellerById } from "@/lib/sellers";
 import { logAudit } from "@/lib/audit/logger";
-import {
-  createOrder,
-  authorizeOnly,
-  capturePayment,
-  withRazorpayRetry,
-  isRazorpayConfigured,
-} from "@/lib/razorpay";
+import { executeApprovedPayment } from "@/lib/razorpay/executePayment";
 import type { FinalDecision } from "@/lib/types";
+import type { PaymentExecutionResult } from "@/lib/razorpay/executePayment";
 
 export interface AgentContext {
   lastDecision?: FinalDecision;
   lastExplanation?: string;
+  lastPayment?: PaymentExecutionResult;
 }
 
 export function createBuyerTools(ctx: AgentContext) {
@@ -115,66 +111,24 @@ export function createBuyerTools(ctx: AgentContext) {
         return { error: "Payment refused by trust/policy gates" };
       }
 
-      if (!isRazorpayConfigured()) {
-        const mockResult = {
-          mode: "mock",
-          orderId: `order_mock_${Date.now()}`,
-          paymentId: `pay_mock_${Date.now()}`,
-          action,
-          amount: payAmount,
-          status: action === "capture" ? "captured" : "authorized",
-        };
-        logAudit("payment", `Mock ${action} for ${seller.name}`, mockResult);
-        return mockResult;
-      }
-
-      const receipt = `tg-${sellerId}-${Date.now()}`;
-      const orderResult = await withRazorpayRetry("createOrder", () =>
-        createOrder(payAmount, receipt)
-      );
-
-      if (!orderResult.success || !orderResult.data) {
-        logAudit("error", `Order creation failed: ${orderResult.error}`, {
-          flagged: orderResult.flagged,
-        });
-        return { error: orderResult.error, flagged: orderResult.flagged };
-      }
-
-      const authResult = await withRazorpayRetry("authorizeOnly", () =>
-        authorizeOnly(orderResult.data!.orderId, payAmount)
-      );
-
-      if (!authResult.success || !authResult.data) {
-        logAudit("error", `Authorization failed: ${authResult.error}`, {
-          flagged: authResult.flagged,
-        });
-        return { error: authResult.error, flagged: authResult.flagged };
-      }
-
-      if (action === "capture" && decision.action === "capture") {
-        const captureResult = await withRazorpayRetry("capturePayment", () =>
-          capturePayment(authResult.data!.paymentId, payAmount)
-        );
-
-        if (!captureResult.success) {
-          logAudit("error", `Capture failed: ${captureResult.error}`, {
-            flagged: captureResult.flagged,
-          });
-          return { error: captureResult.error, flagged: captureResult.flagged };
-        }
-
-        logAudit("payment", `Captured payment for ${seller.name}`, {
-          ...captureResult.data,
-          orderId: orderResult.data.orderId,
-        });
-        return { ...captureResult.data, orderId: orderResult.data.orderId };
-      }
-
-      logAudit("payment", `Authorized (hold) for ${seller.name}`, {
-        ...authResult.data,
-        orderId: orderResult.data.orderId,
+      const payment = await executeApprovedPayment({
+        sellerId,
+        sellerName: seller.name,
+        amount: payAmount,
+        action,
       });
-      return { ...authResult.data, orderId: orderResult.data.orderId, held: true };
+      ctx.lastPayment = payment;
+
+      if (payment.flagged || !payment.success) {
+        return {
+          error: payment.error ?? "Razorpay call failed",
+          flagged: true,
+          unresolved: true,
+          orderId: payment.orderId,
+        };
+      }
+
+      return payment;
     },
   });
 

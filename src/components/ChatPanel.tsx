@@ -114,6 +114,25 @@ export function ChatPanel({
                   {msg.explanation && (
                     <p className="mt-2 text-zinc-400">{msg.explanation}</p>
                   )}
+                  {msg.payment && (
+                    <p
+                      className={`mt-2 ${
+                        msg.payment.flagged
+                          ? "text-orange-400"
+                          : "text-zinc-400"
+                      }`}
+                    >
+                      {msg.payment.flagged
+                        ? `FLAGGED unresolved: ${String(msg.payment.error ?? "Razorpay failed after retry")}`
+                        : `Payment ${String(msg.payment.status ?? msg.payment.action ?? "ok")}${
+                            msg.payment.orderId
+                              ? ` · order ${String(msg.payment.orderId)}`
+                              : ""
+                          }${
+                            msg.payment.mode === "mock" ? " · mock" : ""
+                          }`}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
