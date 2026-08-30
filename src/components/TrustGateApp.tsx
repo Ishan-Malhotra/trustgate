@@ -28,7 +28,6 @@ export function TrustGateApp() {
   const [loading, setLoading] = useState(false);
   const [logLoading, setLogLoading] = useState(false);
   const [llmConfigured, setLlmConfigured] = useState(false);
-  const [workspaceConfigured, setWorkspaceConfigured] = useState(false);
   const [razorpayConfigured, setRazorpayConfigured] = useState(false);
   const [bootError, setBootError] = useState<string>();
 
@@ -39,7 +38,6 @@ export function TrustGateApp() {
     setSellers(data.sellers);
     setUserPolicy(data.userPolicy);
     setLlmConfigured(Boolean(data.llmConfigured));
-    setWorkspaceConfigured(Boolean(data.anthropicWorkspaceConfigured));
     setRazorpayConfigured(Boolean(data.razorpayConfigured));
   }, []);
 
@@ -145,18 +143,8 @@ export function TrustGateApp() {
         </p>
         <p className="mt-1 text-xs text-zinc-500">
           Agent:{" "}
-          <span
-            className={
-              llmConfigured && workspaceConfigured
-                ? "text-emerald-400"
-                : "text-amber-400"
-            }
-          >
-            {!llmConfigured
-              ? "missing ANTHROPIC_API_KEY"
-              : workspaceConfigured
-                ? "Anthropic ready"
-                : "add ANTHROPIC_WORKSPACE_ID (wrkspc_…)"}
+          <span className={llmConfigured ? "text-emerald-400" : "text-amber-400"}>
+            {llmConfigured ? "Anthropic ready" : "missing ANTHROPIC_API_KEY"}
           </span>
           {" · "}
           Razorpay:{" "}

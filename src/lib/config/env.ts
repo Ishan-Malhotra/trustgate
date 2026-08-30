@@ -33,10 +33,7 @@ export function hydrateEnvFromLocal(): void {
   const parsed = parseEnvFile(readFileSync(envPath, "utf8"));
   for (const [key, value] of Object.entries(parsed)) {
     if (!value) continue;
-    const current = process.env[key]?.trim();
-    if (!current) {
-      process.env[key] = value;
-    }
+    process.env[key] = value;
   }
 }
 

@@ -21,8 +21,5 @@ export function missingAnthropicConfigMessage(): string {
   if (!getAnthropicApiKey()) {
     return "The buyer agent needs ANTHROPIC_API_KEY in .env.local (same line, no quotes).";
   }
-  if (!getAnthropicWorkspaceId()) {
-    return "Your Anthropic key is identity-linked, so it also needs ANTHROPIC_WORKSPACE_ID in .env.local. Copy the wrkspc_… id from Claude Console → Settings → Workspaces. Or create a key scoped to one workspace so this header is not required.";
-  }
-  return "Anthropic is configured.";
+  return "Your Anthropic key still looks identity-linked. Use a workspace-scoped key from the Default Workspace, or set ANTHROPIC_WORKSPACE_ID to the wrkspc_… id from Claude Console → Settings → Workspaces.";
 }
