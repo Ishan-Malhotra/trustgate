@@ -20,15 +20,6 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). Ask for a **goal**, not a seller name, e.g. “Get me the best banana bread you can find”.
 
-### Environment
-
-| Variable | Purpose |
-|----------|---------|
-| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | Test-mode keys. Missing keys → mock orders |
-| `RAZORPAY_TEST_PAYMENT_ID` | Optional authorized `pay_` id for capture experiments |
-| `ANTHROPIC_API_KEY` | Buyer agent + explanation layer (Claude Sonnet 4.5) |
-| `ANTHROPIC_WORKSPACE_ID` | Only if the key is identity-linked |
-
 ## How a purchase works
 
 1. User sends a goal (item + optional budget). Demo buttons never name a seller.
