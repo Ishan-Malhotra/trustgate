@@ -3,7 +3,7 @@ import { getAllSellers } from "@/lib/sellers";
 import { scoreSeller } from "@/lib/trust/scoreSeller";
 import { getSpendLimit } from "@/lib/trust/getSpendLimit";
 import { USER_POLICY } from "@/lib/config/userPolicy";
-import { isLlmConfigured } from "@/lib/config/env";
+import { isLlmConfigured, getAnthropicWorkspaceId } from "@/lib/config/env";
 import { isRazorpayConfigured } from "@/lib/razorpay/client";
 
 export async function GET() {
@@ -17,6 +17,7 @@ export async function GET() {
     sellers,
     userPolicy: USER_POLICY,
     llmConfigured: isLlmConfigured(),
+    anthropicWorkspaceConfigured: Boolean(getAnthropicWorkspaceId()),
     razorpayConfigured: isRazorpayConfigured(),
   });
 }

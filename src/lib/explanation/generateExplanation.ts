@@ -1,8 +1,7 @@
 import { generateText } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
 import type { FinalDecision } from "@/lib/types";
 import { logAudit } from "@/lib/audit/logger";
-import { getAnthropicApiKey } from "@/lib/config/env";
+import { getAnthropicProvider } from "@/lib/config/anthropic";
 
 export async function generateExplanation(
   sellerName: string,
@@ -21,15 +20,14 @@ export async function generateExplanation(
     spendLimit: decision.spendLimit,
   };
 
-  const apiKey = getAnthropicApiKey();
-  if (!apiKey) {
+  const anthropic = getAnthropicProvider();
+  if (!anthropic) {
     const fallback = buildFallbackExplanation(facts);
     logAudit("agent", `Explanation (fallback): ${fallback}`, facts);
     return fallback;
   }
 
   try {
-    const anthropic = createAnthropic({ apiKey });
     const { text } = await generateText({
       model: anthropic("claude-sonnet-4-5"),
       system:

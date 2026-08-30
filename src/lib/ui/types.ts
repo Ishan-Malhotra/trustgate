@@ -33,6 +33,7 @@ export interface SellersResponse {
   sellers: ScoredSeller[];
   userPolicy: UserPolicy;
   llmConfigured?: boolean;
+  anthropicWorkspaceConfigured?: boolean;
   razorpayConfigured?: boolean;
 }
 

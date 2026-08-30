@@ -50,6 +50,10 @@ export function getAnthropicApiKey(): string | undefined {
   return getEnvValue("ANTHROPIC_API_KEY");
 }
 
+export function getAnthropicWorkspaceId(): string | undefined {
+  return getEnvValue("ANTHROPIC_WORKSPACE_ID");
+}
+
 export function isLlmConfigured(): boolean {
   return Boolean(getAnthropicApiKey());
 }

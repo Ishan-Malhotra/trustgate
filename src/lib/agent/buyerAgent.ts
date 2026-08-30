@@ -1,10 +1,9 @@
 import { generateText, stepCountIs } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
 import { createBuyerTools, type AgentContext } from "./tools";
 import { generateExplanation } from "@/lib/explanation/generateExplanation";
 import { getAllSellers, getSellerById } from "@/lib/sellers";
 import { logAudit, getAuditLog } from "@/lib/audit/logger";
-import { getAnthropicApiKey } from "@/lib/config/env";
+import { getAnthropicProvider, missingAnthropicConfigMessage } from "@/lib/config/anthropic";
 import type { PaymentExecutionResult } from "@/lib/razorpay/executePayment";
 
 function buildSystemPrompt(): string {
@@ -53,20 +52,15 @@ export async function runBuyerAgent(
 
   logAudit("agent", `User request: ${userMessage}`);
 
-  const apiKey = getAnthropicApiKey();
-  if (!apiKey) {
-    logAudit(
-      "error",
-      "ANTHROPIC_API_KEY is empty in .env.local — buyer agent cannot run"
-    );
+  const anthropic = getAnthropicProvider();
+  if (!anthropic) {
+    const message = missingAnthropicConfigMessage();
+    logAudit("error", message);
     return {
-      response:
-        "The buyer agent needs ANTHROPIC_API_KEY in .env.local (same line as the variable, no quotes). Save the file and retry — the key is read on each request.",
+      response: message,
       auditLog: getAuditLog(),
     };
   }
-
-  const anthropic = createAnthropic({ apiKey });
   let responseText: string;
 
   try {
@@ -92,8 +86,11 @@ export async function runBuyerAgent(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logAudit("error", `Buyer agent failed: ${message}`);
+    const workspaceHint = message.includes("anthropic-workspace-id")
+      ? missingAnthropicConfigMessage()
+      : `Agent error: ${message}`;
     return {
-      response: `Agent error: ${message}`,
+      response: workspaceHint,
       decision: ctx.lastDecision,
       payment: ctx.lastPayment,
       auditLog: getAuditLog(),
