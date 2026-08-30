@@ -6,7 +6,7 @@ AI buyer-agent that decides whether to pay a seller based on **trust scoring** a
 
 ```bash
 npm install
-cp .env.example .env.local   # add Razorpay test keys + OpenAI key
+cp .env.example .env.local   # add Razorpay test keys + ANTHROPIC_API_KEY
 npm run dev
 ```
 

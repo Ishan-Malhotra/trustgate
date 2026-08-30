@@ -32,6 +32,8 @@ export interface ChatMessage {
 export interface SellersResponse {
   sellers: ScoredSeller[];
   userPolicy: UserPolicy;
+  llmConfigured?: boolean;
+  razorpayConfigured?: boolean;
 }
 
 export interface EvaluateResponse {

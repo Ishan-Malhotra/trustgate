@@ -1,7 +1,8 @@
 import { generateText } from "ai";
-import { openai } from "@ai-sdk/openai";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import type { FinalDecision } from "@/lib/types";
 import { logAudit } from "@/lib/audit/logger";
+import { getAnthropicApiKey } from "@/lib/config/env";
 
 export async function generateExplanation(
   sellerName: string,
@@ -20,15 +21,17 @@ export async function generateExplanation(
     spendLimit: decision.spendLimit,
   };
 
-  if (!process.env.OPENAI_API_KEY) {
+  const apiKey = getAnthropicApiKey();
+  if (!apiKey) {
     const fallback = buildFallbackExplanation(facts);
     logAudit("agent", `Explanation (fallback): ${fallback}`, facts);
     return fallback;
   }
 
   try {
+    const anthropic = createAnthropic({ apiKey });
     const { text } = await generateText({
-      model: openai("gpt-4o-mini"),
+      model: anthropic("claude-sonnet-4-5"),
       system:
         "You explain TrustGate payment decisions in one short sentence. Be specific about trust score and policy. Use ₹ for amounts.",
       prompt: `Explain this decision: ${JSON.stringify(facts)}`,

@@ -8,6 +8,7 @@ export interface Seller {
   return_rate: number;
   price_volatility: number;
   _comment?: string;
+  known_for?: string[];
 }
 
 export type TrustTier = "high" | "medium" | "low";

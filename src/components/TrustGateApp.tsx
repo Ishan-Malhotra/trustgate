@@ -8,7 +8,6 @@ import { AuditLogPanel } from "@/components/AuditLogPanel";
 import type { AuditEntry, UserPolicy } from "@/lib/types";
 import type {
   ChatMessage,
-  EvaluateResponse,
   PurchaseResponse,
   ScoredSeller,
   SellersResponse,
@@ -28,6 +27,8 @@ export function TrustGateApp() {
   const [selectedSellerId, setSelectedSellerId] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [logLoading, setLogLoading] = useState(false);
+  const [llmConfigured, setLlmConfigured] = useState(false);
+  const [razorpayConfigured, setRazorpayConfigured] = useState(false);
   const [bootError, setBootError] = useState<string>();
 
   const fetchSellers = useCallback(async () => {
@@ -36,6 +37,8 @@ export function TrustGateApp() {
     const data: SellersResponse = await res.json();
     setSellers(data.sellers);
     setUserPolicy(data.userPolicy);
+    setLlmConfigured(Boolean(data.llmConfigured));
+    setRazorpayConfigured(Boolean(data.razorpayConfigured));
   }, []);
 
   const fetchAuditLog = useCallback(async () => {
@@ -57,22 +60,6 @@ export function TrustGateApp() {
     fetchAuditLog();
   }, [fetchSellers, fetchAuditLog]);
 
-  async function runEvaluate(
-    sellerId: string,
-    amount: number
-  ): Promise<EvaluateResponse> {
-    const res = await fetch("/api/evaluate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sellerId, amount, executePayment: true }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error ?? "Evaluation failed");
-    }
-    return res.json();
-  }
-
   async function runPurchase(message: string): Promise<PurchaseResponse> {
     const res = await fetch("/api/purchase", {
       method: "POST",
@@ -92,30 +79,17 @@ export function TrustGateApp() {
 
     try {
       const parsed = parsePurchaseMessage(message, sellers);
-      let assistantContent: string;
-      let decision: EvaluateResponse["decision"] | undefined;
-      let explanation: string | undefined;
-      let payment: Record<string, unknown> | undefined;
+      if (parsed.sellerId) setSelectedSellerId(parsed.sellerId);
 
-      if (parsed.sellerId && parsed.amount) {
-        setSelectedSellerId(parsed.sellerId);
-        const result = await runEvaluate(parsed.sellerId, parsed.amount);
-        decision = result.decision;
-        explanation = result.explanation;
-        payment = result.payment;
-        assistantContent = result.explanation;
-        if (result.auditLog) setAuditLog(result.auditLog);
-      } else {
-        const agentResult = await runPurchase(message);
-        decision = agentResult.decision;
-        explanation = agentResult.explanation;
-        payment = agentResult.payment;
-        assistantContent =
-          agentResult.explanation ??
-          agentResult.response ??
-          "Request processed.";
-        if (agentResult.auditLog) setAuditLog(agentResult.auditLog);
-      }
+      const agentResult = await runPurchase(message);
+      const decision = agentResult.decision;
+      const explanation = agentResult.explanation;
+      const payment = agentResult.payment;
+      const assistantContent =
+        agentResult.explanation ??
+        agentResult.response ??
+        "Request processed.";
+      if (agentResult.auditLog) setAuditLog(agentResult.auditLog);
 
       setMessages((prev) => [
         ...prev,
@@ -166,6 +140,21 @@ export function TrustGateApp() {
         </h1>
         <p className="text-sm text-zinc-500">
           AI buyer-agent — trust score + user policy before payment
+        </p>
+        <p className="mt-1 text-xs text-zinc-500">
+          Agent:{" "}
+          <span className={llmConfigured ? "text-emerald-400" : "text-amber-400"}>
+            {llmConfigured ? "Anthropic ready" : "missing ANTHROPIC_API_KEY"}
+          </span>
+          {" · "}
+          Razorpay:{" "}
+          <span
+            className={
+              razorpayConfigured ? "text-emerald-400" : "text-zinc-500"
+            }
+          >
+            {razorpayConfigured ? "test keys loaded" : "mock mode"}
+          </span>
         </p>
       </header>
 

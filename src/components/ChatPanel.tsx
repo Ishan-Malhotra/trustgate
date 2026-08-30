@@ -19,6 +19,10 @@ interface ChatPanelProps {
 
 const QUICK_DEMOS = [
   {
+    label: "Best banana bread",
+    message: "order the best banana bread",
+  },
+  {
     label: "Buy ₹250 — Blue Bottle",
     message: "Buy lunch for ₹250 from Blue Bottle Coffee",
   },
@@ -29,10 +33,6 @@ const QUICK_DEMOS = [
   {
     label: "Buy ₹200 — Gaming seller",
     message: "Buy ₹200 from DealDash Express",
-  },
-  {
-    label: "Buy ₹150 — Bargain Bazaar",
-    message: "Buy ₹150 from Bargain Bazaar",
   },
 ];
 
@@ -168,7 +168,7 @@ export function ChatPanel({
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Buy ₹250 from Blue Bottle Coffee"
+            placeholder="order the best banana bread"
             disabled={loading}
             className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-blue-500 focus:outline-none disabled:opacity-50"
           />

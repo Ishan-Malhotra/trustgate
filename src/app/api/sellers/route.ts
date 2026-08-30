@@ -3,6 +3,8 @@ import { getAllSellers } from "@/lib/sellers";
 import { scoreSeller } from "@/lib/trust/scoreSeller";
 import { getSpendLimit } from "@/lib/trust/getSpendLimit";
 import { USER_POLICY } from "@/lib/config/userPolicy";
+import { isLlmConfigured } from "@/lib/config/env";
+import { isRazorpayConfigured } from "@/lib/razorpay/client";
 
 export async function GET() {
   const sellers = getAllSellers().map(({ _comment, ...seller }) => {
@@ -11,5 +13,10 @@ export async function GET() {
     return { ...seller, score, tier, spendLimit, breakdown };
   });
 
-  return NextResponse.json({ sellers, userPolicy: USER_POLICY });
+  return NextResponse.json({
+    sellers,
+    userPolicy: USER_POLICY,
+    llmConfigured: isLlmConfigured(),
+    razorpayConfigured: isRazorpayConfigured(),
+  });
 }

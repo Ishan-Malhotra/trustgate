@@ -1,10 +1,11 @@
 import Razorpay from "razorpay";
+import { getEnvValue } from "@/lib/config/env";
 
 let client: Razorpay | null = null;
 
 export function getRazorpayClient(): Razorpay {
-  const keyId = process.env.RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  const keyId = getEnvValue("RAZORPAY_KEY_ID");
+  const keySecret = getEnvValue("RAZORPAY_KEY_SECRET");
 
   if (!keyId || !keySecret) {
     throw new Error(
@@ -21,6 +22,6 @@ export function getRazorpayClient(): Razorpay {
 
 export function isRazorpayConfigured(): boolean {
   return Boolean(
-    process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
+    getEnvValue("RAZORPAY_KEY_ID") && getEnvValue("RAZORPAY_KEY_SECRET")
   );
 }

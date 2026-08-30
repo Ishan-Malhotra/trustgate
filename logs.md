@@ -23,7 +23,7 @@
 - API: `POST /api/purchase` (agent), `POST /api/evaluate` (deterministic)
 
 ## Phase 5 — Explanation + audit (Steps 6–7)
-- **Done:** `generateExplanation()` — OpenAI with deterministic fallback
+- **Done:** `generateExplanation()` — Anthropic Claude with deterministic fallback
 - **Done:** Audit logger — in-memory + `data/audit-log.json` persistence
 - API: `GET /api/audit-log`, `GET /api/sellers`
 
@@ -32,7 +32,8 @@
 - **Done:** Seller/score panel with tier colors and gaming seller badge
 - **Done:** Live audit log feed (refreshes after each request)
 - **Done:** User policy display (loaded from API / `userPolicy.ts`)
-- Works without API keys via `/api/evaluate` fallback when seller + amount are parsed
+- Chat always goes through `POST /api/purchase` (Anthropic buyer-agent)
+- Buyer agent + explanations use `ANTHROPIC_API_KEY` / Claude Sonnet 4.5
 
 ## Phase 7 — Razorpay failure path (Step 9)
 - **Done:** 8s timeout on Razorpay calls, retry once, then `flagged` unresolved audit entry
