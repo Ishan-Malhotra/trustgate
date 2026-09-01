@@ -45,15 +45,22 @@ export function TrustGateApp() {
   const [razorpayConfigured, setRazorpayConfigured] = useState(false);
   const [bootError, setBootError] = useState<string>();
 
-  const fetchSellers = useCallback(async (showScores: boolean) => {
-    const res = await fetch(showScores ? "/api/sellers?dev=1" : "/api/sellers");
-    if (!res.ok) throw new Error("Failed to load sellers");
-    const data: SellersResponse = await res.json();
-    setSellers(data.sellers);
-    setUserPolicy(data.userPolicy);
-    setLlmConfigured(Boolean(data.llmConfigured));
-    setRazorpayConfigured(Boolean(data.razorpayConfigured));
-  }, []);
+  const fetchSellers = useCallback(
+    async (showScores: boolean, options?: { syncPolicy?: boolean }) => {
+      const res = await fetch(
+        showScores ? "/api/sellers?dev=1" : "/api/sellers"
+      );
+      if (!res.ok) throw new Error("Failed to load sellers");
+      const data: SellersResponse = await res.json();
+      setSellers(data.sellers);
+      if (options?.syncPolicy) {
+        setUserPolicy(data.userPolicy);
+      }
+      setLlmConfigured(Boolean(data.llmConfigured));
+      setRazorpayConfigured(Boolean(data.razorpayConfigured));
+    },
+    []
+  );
 
   const fetchAuditLog = useCallback(async () => {
     setLogLoading(true);
@@ -68,7 +75,7 @@ export function TrustGateApp() {
   }, []);
 
   useEffect(() => {
-    fetchSellers(false).catch((err) =>
+    fetchSellers(false, { syncPolicy: true }).catch((err) =>
       setBootError(err instanceof Error ? err.message : "Boot failed")
     );
     fetchAuditLog();
