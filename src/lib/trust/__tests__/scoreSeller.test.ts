@@ -90,6 +90,23 @@ describe("getSpendLimit", () => {
     expect(getSpendLimit("high", 80, confidence)).toBe(LIVE_TRIAL_SPEND_LIMIT);
   });
 
+  it("does not refuse low tier when confidence is high", () => {
+    const confidence = computeConfidence({
+      cin: "L85110KA1981PLC013115",
+      companyName: "INFOSYS LIMITED",
+      registrationDate: "1981-07-02",
+      status: "Active",
+      authorizedCapital: 24_000_000_000,
+      paidupCapital: 20_278_293_815,
+      state: "karnataka",
+      nicCode: "85110",
+      rocCode: "ROC Bangalore",
+    });
+    expect(confidence.band).toBe("high");
+    expect(getSpendLimit("low", 40, confidence)).toBeGreaterThan(0);
+    expect(getSpendLimit("low", 40, confidence)).not.toBe(0);
+  });
+
   it("omitted confidence preserves seed behavior", () => {
     expect(getSpendLimit("high", 90)).toBeNull();
     expect(getSpendLimit("medium", 60)).toBe(425);
@@ -118,6 +135,62 @@ describe("evaluateTrust with confidence", () => {
     expect(decision.spendLimit).toBe(LIVE_TRIAL_SPEND_LIMIT);
     expect(decision.trustReason).toContain("Insufficient verifiable history");
     expect(decision.confidenceBand).toBe("low");
+  });
+
+  it("high confidence young merchant with low risk score captures, not refuses", () => {
+    const seller = sellerFromMca("Young Active Co", {
+      cin: "U12345",
+      companyName: "YOUNG ACTIVE CO",
+      registrationDate: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10),
+      status: "Active",
+      authorizedCapital: 1_000_000,
+      paidupCapital: 500_000,
+      state: "karnataka",
+      nicCode: "62010",
+      rocCode: "ROC Bangalore",
+    });
+    const confidence = computeConfidence({
+      cin: "U12345",
+      companyName: "YOUNG ACTIVE CO",
+      registrationDate: seller.account_age_days
+        ? new Date(Date.now() - seller.account_age_days * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .slice(0, 10)
+        : null,
+      status: "Active",
+      authorizedCapital: 1_000_000,
+      paidupCapital: 500_000,
+      state: "karnataka",
+      nicCode: "62010",
+      rocCode: "ROC Bangalore",
+    });
+
+    const scoreResult = scoreSeller(seller);
+    expect(scoreResult.tier).toBe("low");
+    expect(confidence.band).toBe("medium");
+
+    const decision = evaluateTrust(seller, 250, confidence);
+    expect(decision.action).not.toBe("refuse");
+    expect(decision.spendLimit).toBeGreaterThan(0);
+  });
+
+  it("high confidence with low tier from missing history captures", () => {
+    const seller = {
+      ...sellerFromMca("Verified Co", infosysRecord),
+      account_age_days: 30,
+    };
+    const confidence = computeConfidence(infosysRecord);
+    const scoreResult = scoreSeller(seller);
+
+    expect(scoreResult.tier).toBe("low");
+    expect(confidence.band).toBe("high");
+
+    const decision = evaluateTrust(seller, 200, confidence);
+    expect(decision.action).toBe("capture");
+    expect(decision.trustReason).toContain("High registry confidence");
+    expect(decision.spendLimit).toBeGreaterThan(0);
   });
 
   it("high confidence established company captures when history unverified", () => {

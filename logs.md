@@ -63,6 +63,9 @@
 - **Tests:** confidence, empty-history regression, mcaLookup (mocked fetch)
 - **Next step:** GST verification; fuzzy MCA name matching
 - **Fix:** High MCA confidence + unverified transaction history → capture (not medium-tier hold); structured reasoning chain in audit log
+- **Fix:** `getSpendLimit()` no longer refuses low-tier merchants before checking confidence — high/medium registry confidence now sets a spend ceiling instead of returning 0; registry-verified capture applies to low tier too
+- **Done:** Editable user policy panel — changes persist via `PUT /api/config` and apply on the next purchase immediately
+- **Done:** Audit log layout — scroll contained in viewport; sellers panel capped so log stays on screen
 
 ## Repository
 - GitHub: https://github.com/Ishan-Malhotra/trustgate

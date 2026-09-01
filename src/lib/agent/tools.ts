@@ -1,6 +1,5 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { USER_POLICY } from "@/lib/config/userPolicy";
 import { applyUserPolicy } from "@/lib/policy/applyUserPolicy";
 import { evaluateTrust } from "@/lib/trust/evaluateTrust";
 import { computeConfidence } from "@/lib/trust/confidence";
@@ -14,8 +13,9 @@ import { searchCompany } from "@/lib/registry/mcaLookup";
 import { sellerFromMca } from "@/lib/registry/sellerFromMca";
 import { logAudit } from "@/lib/audit/logger";
 import { executeApprovedPayment } from "@/lib/razorpay/executePayment";
-import type { FinalDecision, Seller, SellerTrustCheck } from "@/lib/types";
+import type { FinalDecision, Seller, SellerTrustCheck, UserPolicy } from "@/lib/types";
 import type { PaymentExecutionResult } from "@/lib/razorpay/executePayment";
+import { getUserPolicy } from "@/lib/config/runtimePolicy";
 
 export interface AgentContext {
   lastDecision?: FinalDecision;
@@ -60,7 +60,10 @@ function storeTrustDecision(
   });
 }
 
-export function createBuyerTools(ctx: AgentContext) {
+export function createBuyerTools(
+  ctx: AgentContext,
+  userPolicy: UserPolicy = getUserPolicy()
+) {
   const checkTrust = tool({
     description:
       "Check seller trust score and spending limit. Call on EVERY relevant seed-catalog seller before choosing. MUST be called before any payment action.",
@@ -79,7 +82,7 @@ export function createBuyerTools(ctx: AgentContext) {
       const finalDecision = applyUserPolicy(
         trustDecision,
         amount,
-        USER_POLICY
+        userPolicy
       );
 
       storeTrustDecision(ctx, seller, amount, finalDecision);
@@ -100,7 +103,7 @@ export function createBuyerTools(ctx: AgentContext) {
         originalAction: finalDecision.originalAction,
         finalAction: finalDecision.action,
         policyReason: finalDecision.policyReason,
-        confirmThreshold: USER_POLICY.confirm_above_amount,
+        confirmThreshold: userPolicy.confirm_above_amount,
       });
 
       return {
@@ -136,7 +139,7 @@ export function createBuyerTools(ctx: AgentContext) {
       const finalDecision = applyUserPolicy(
         trustDecision,
         amount,
-        USER_POLICY
+        userPolicy
       );
 
       const reasoningChain = buildLiveLookupReasoningChain({

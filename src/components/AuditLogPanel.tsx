@@ -35,7 +35,7 @@ export function AuditLogPanel({ entries, loading }: AuditLogPanelProps) {
   }, [entries.length]);
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
           Audit Log

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getAllSellers } from "@/lib/sellers";
 import { scoreSeller } from "@/lib/trust/scoreSeller";
 import { getSpendLimit } from "@/lib/trust/getSpendLimit";
-import { USER_POLICY } from "@/lib/config/userPolicy";
+import { getUserPolicy } from "@/lib/config/runtimePolicy";
 import { isLlmConfigured, getAnthropicWorkspaceId } from "@/lib/config/env";
 import { isRazorpayConfigured } from "@/lib/razorpay/client";
 
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     sellers,
-    userPolicy: USER_POLICY,
+    userPolicy: getUserPolicy(),
     llmConfigured: isLlmConfigured(),
     anthropicWorkspaceConfigured: Boolean(getAnthropicWorkspaceId()),
     razorpayConfigured: isRazorpayConfigured(),

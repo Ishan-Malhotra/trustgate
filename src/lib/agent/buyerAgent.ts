@@ -4,7 +4,9 @@ import { generateExplanation } from "@/lib/explanation/generateExplanation";
 import { getAllSellers, getSellerById } from "@/lib/sellers";
 import { logAudit, getAuditLog } from "@/lib/audit/logger";
 import { getAnthropicProvider, missingAnthropicConfigMessage } from "@/lib/config/anthropic";
+import type { UserPolicy } from "@/lib/types";
 import type { PaymentExecutionResult } from "@/lib/razorpay/executePayment";
+import { getUserPolicy } from "@/lib/config/runtimePolicy";
 
 function buildSystemPrompt(): string {
   const catalog = getAllSellers()
@@ -63,14 +65,16 @@ export interface PurchaseRequestResult {
 }
 
 export async function runBuyerAgent(
-  userMessage: string
+  userMessage: string,
+  userPolicy?: UserPolicy
 ): Promise<PurchaseRequestResult> {
+  const activePolicy = userPolicy ?? getUserPolicy();
   const ctx: AgentContext = {
     decisionsBySellerId: {},
     trustChecks: [],
     liveMerchants: {},
   };
-  const tools = createBuyerTools(ctx);
+  const tools = createBuyerTools(ctx, activePolicy);
 
   logAudit("agent", `User request: ${userMessage}`);
 

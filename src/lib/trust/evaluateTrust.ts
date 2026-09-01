@@ -112,23 +112,23 @@ export function evaluateTrust(
     };
   }
 
+  const registryVerified =
+    confidence?.band === "high" && isUnverifiedHistoryOnly(breakdown);
+
+  if (registryVerified) {
+    return {
+      action: "capture",
+      score,
+      tier,
+      spendLimit,
+      effectiveAmount: amount,
+      trustReason: `High registry confidence (${confidence.level}%) — approved; no bad transaction signals, only unverified purchase history`,
+      breakdown,
+      ...confidenceFields,
+    };
+  }
+
   if (tier === "medium") {
-    const registryVerified =
-      confidence?.band === "high" && isUnverifiedHistoryOnly(breakdown);
-
-    if (registryVerified) {
-      return {
-        action: "capture",
-        score,
-        tier,
-        spendLimit,
-        effectiveAmount: amount,
-        trustReason: `High registry confidence (${confidence.level}%) — approved; no bad transaction signals, only unverified purchase history`,
-        breakdown,
-        ...confidenceFields,
-      };
-    }
-
     return {
       action: "hold",
       score,

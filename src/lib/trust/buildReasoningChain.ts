@@ -53,7 +53,7 @@ export function buildLiveLookupReasoningChain(input: {
 
   const riskVsConfidence =
     confidence.band === "high" && !breakdown.transactionHistoryKnown
-      ? "High registry confidence overrides medium risk tier caused solely by missing transaction history — not by bad signals."
+      ? "High registry confidence overrides low/medium risk tier caused solely by missing transaction history — not by bad signals."
       : confidence.band === "low"
         ? "Low confidence caps spend regardless of risk score — insufficient verifiable history."
         : confidence.adverseStatus || confidence.elevatedRisk
