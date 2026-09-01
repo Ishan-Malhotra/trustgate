@@ -19,12 +19,17 @@ export async function generateExplanation(
     finalAction: decision.action,
     originalAction: decision.originalAction,
     spendLimit: decision.spendLimit,
+    confidenceLevel: decision.confidenceLevel,
+    confidenceBand: decision.confidenceBand,
+    confidenceReasons: decision.confidenceReasons,
     candidates: comparison.map((c) => ({
       seller: c.sellerName,
       amount: c.amount,
       score: c.score,
       tier: c.tier,
       action: c.recommendedAction,
+      liveLookup: c.liveLookup,
+      confidenceBand: c.confidenceBand,
     })),
   };
 
@@ -39,7 +44,7 @@ export async function generateExplanation(
     const { text } = await generateText({
       model: anthropic("claude-sonnet-4-5"),
       system:
-        "You explain TrustGate payment decisions in 1-3 short sentences. Compare candidates when more than one was evaluated (price vs trust). Be specific about scores and policy. Use ₹ for amounts.",
+        "You explain TrustGate payment decisions in 1-3 short sentences. Compare candidates when more than one was evaluated (price vs trust). Be specific about scores and policy. Use ₹ for amounts. When confidence data is present, clearly separate RISK (trust score, dispute signals) from CONFIDENCE (registry verification). Say 'insufficient verifiable history' for low confidence, never 'looks risky' for that case. When high registry confidence approved a merchant with no transaction history, say registry verification drove approval — do NOT say medium trust tier caused a hold.",
       prompt: `Explain this decision: ${JSON.stringify(facts)}`,
       maxOutputTokens: 220,
     });
@@ -62,6 +67,8 @@ function buildFallbackExplanation(facts: {
   policyReason?: string;
   finalAction: string;
   originalAction: string;
+  confidenceBand?: string;
+  confidenceReasons?: string[];
   candidates?: Array<{
     seller: string;
     amount: number;
@@ -77,6 +84,12 @@ function buildFallbackExplanation(facts: {
         : "refused";
 
   let msg = `${action}: ${facts.seller} — trust score ${facts.trustScore} (${facts.tier}), ₹${facts.amount}. ${facts.trustReason}`;
+  if (facts.confidenceBand) {
+    msg += ` Confidence: ${facts.confidenceBand}`;
+    if (facts.confidenceReasons?.length) {
+      msg += ` (${facts.confidenceReasons[0]})`;
+    }
+  }
   if (facts.candidates && facts.candidates.length > 1) {
     const others = facts.candidates
       .filter((c) => c.seller !== facts.seller)

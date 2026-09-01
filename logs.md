@@ -52,6 +52,18 @@
 - **Done:** Demo buttons: cheapest banana bread; Indian food safely; phone case best price; coffee tasting ~₹450 (policy hold)
 - **Done:** Default `GET /api/sellers` omits score fields so the catalog cannot be eyeballed as a ranked list
 
+## Phase 9 — Live MCA lookup + confidence-based spend
+- **Done:** `searchCompany()` — data.gov.in MCA Company Master Data API, exact name/CIN filters, suffix retries, in-memory cache, graceful null on errors
+- **Done:** `computeConfidence()` — separate confidence band from risk; adverse MCA status elevates risk independently
+- **Done:** `scoreSeller()` empty-history guard — `dispute_rate_history: []` is unknown, not maximal-clean
+- **Done:** `evaluateTrust(seller, amount, confidence?)` — low confidence → ₹200 trial hold ("insufficient verifiable history")
+- **Done:** Agent tool `lookupUnknownMerchant`; seed catalog path unchanged
+- **Done:** Audit log `[live-lookup]` highlighted in UI; Infosys demo button
+- **Env:** `DATA_GOV_IN_API_KEY` (optional)
+- **Tests:** confidence, empty-history regression, mcaLookup (mocked fetch)
+- **Next step:** GST verification; fuzzy MCA name matching
+- **Fix:** High MCA confidence + unverified transaction history → capture (not medium-tier hold); structured reasoning chain in audit log
+
 ## Repository
 - GitHub: https://github.com/Ishan-Malhotra/trustgate
 - README: [README.md](./README.md)

@@ -31,6 +31,8 @@ export interface TrustScoreResult {
     returnPenalty: number;
     volatilityPenalty: number;
     weightedDisputeRate: number;
+    transactionHistoryKnown: boolean;
+    noHistoryPenalty: number;
   };
 }
 
@@ -49,6 +51,9 @@ export interface TrustDecision {
   effectiveAmount: number;
   trustReason: string;
   breakdown: TrustScoreResult["breakdown"];
+  confidenceLevel?: number;
+  confidenceBand?: "high" | "medium" | "low";
+  confidenceReasons?: string[];
 }
 
 export interface FinalDecision extends TrustDecision {
@@ -66,6 +71,10 @@ export interface SellerTrustCheck {
   recommendedAction: PaymentAction;
   trustReason: string;
   policyReason?: string;
+  confidenceLevel?: number;
+  confidenceBand?: "high" | "medium" | "low";
+  confidenceReasons?: string[];
+  liveLookup?: boolean;
 }
 
 export interface AuditEntry {
@@ -78,6 +87,7 @@ export interface AuditEntry {
     | "refusal"
     | "error"
     | "agent"
+    | "reasoning"
     | "flagged";
   message: string;
   details?: Record<string, unknown>;

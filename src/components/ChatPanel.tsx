@@ -33,6 +33,10 @@ const QUICK_DEMOS = [
     label: "Coffee tasting ~₹450",
     message: "Get me a coffee tasting, around ₹450",
   },
+  {
+    label: "Pay Infosys ₹250",
+    message: "Pay Infosys Limited ₹250 for software consulting",
+  },
 ];
 
 export function ChatPanel({
@@ -59,7 +63,8 @@ export function ChatPanel({
         </h2>
         <p className="mt-1 text-xs text-zinc-500">
           Describe a goal, not a seller — e.g. &quot;Get me the best banana bread
-          you can find&quot;
+          you can find&quot;. Name a real company outside the catalog for live MCA
+          lookup.
         </p>
       </div>
 

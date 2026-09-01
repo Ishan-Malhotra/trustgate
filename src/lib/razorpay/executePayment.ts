@@ -46,7 +46,7 @@ export async function executeApprovedPayment(input: {
     return mock;
   }
 
-  const receipt = `tg-${sellerId}-${Date.now()}`;
+  const receipt = `tg-${sellerId.slice(0, 24)}-${Date.now()}`.slice(0, 40);
   const orderResult = await withRazorpayRetry("createOrder", () =>
     createOrder(amount, receipt)
   );

@@ -17,6 +17,8 @@ const baseDecision: TrustDecision = {
     returnPenalty: 2,
     volatilityPenalty: 1,
     weightedDisputeRate: 0.01,
+    transactionHistoryKnown: true,
+    noHistoryPenalty: 0,
   },
 };
 

@@ -1,5 +1,7 @@
 import type { Seller, TrustScoreResult, TrustTier } from "@/lib/types";
 
+const UNKNOWN_HISTORY_DISPUTE_SCORE = 25;
+
 function weightedDisputeRate(history: number[]): number {
   if (history.length === 0) return 0;
 
@@ -25,8 +27,14 @@ function tierFromScore(score: number): TrustTier {
 }
 
 export function scoreSeller(seller: Seller): TrustScoreResult {
-  const weightedRate = weightedDisputeRate(seller.dispute_rate_history);
-  const disputeScore = disputeToScore(weightedRate);
+  const hasTransactionHistory = seller.dispute_rate_history.length > 0;
+  const weightedRate = hasTransactionHistory
+    ? weightedDisputeRate(seller.dispute_rate_history)
+    : 0;
+  const disputeScore = hasTransactionHistory
+    ? disputeToScore(weightedRate)
+    : UNKNOWN_HISTORY_DISPUTE_SCORE;
+  const noHistoryPenalty = hasTransactionHistory ? 0 : 25;
   const kycBonus = seller.kyc_verified ? 15 : 0;
   const ageBonus = Math.min(Math.floor(seller.account_age_days / 365) * 3, 15);
   const returnPenalty = Math.round(Math.min(seller.return_rate / 0.2, 1) * 20);
@@ -46,6 +54,8 @@ export function scoreSeller(seller: Seller): TrustScoreResult {
       returnPenalty,
       volatilityPenalty,
       weightedDisputeRate: Math.round(weightedRate * 1000) / 1000,
+      transactionHistoryKnown: hasTransactionHistory,
+      noHistoryPenalty,
     },
   };
 }

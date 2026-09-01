@@ -15,6 +15,7 @@ const TYPE_STYLES: Record<AuditEntry["type"], string> = {
   refusal: "text-red-400",
   error: "text-orange-400",
   agent: "text-zinc-300",
+  reasoning: "text-cyan-300",
   flagged: "text-orange-300",
 };
 
@@ -56,14 +57,17 @@ export function AuditLogPanel({ entries, loading }: AuditLogPanelProps) {
               className={`rounded-lg border px-3 py-2 ${
                 entry.type === "flagged"
                   ? "border-orange-500/40 bg-orange-950/40"
-                  : "border-zinc-800/80 bg-zinc-950/60"
+                  : entry.type === "reasoning" ||
+                      entry.message.includes("[live-lookup]")
+                    ? "border-cyan-500/40 bg-cyan-950/30"
+                    : "border-zinc-800/80 bg-zinc-950/60"
               }`}
             >
               <div className="flex items-center gap-2 text-zinc-600">
                 <span>{formatTime(entry.timestamp)}</span>
                 <span className={TYPE_STYLES[entry.type]}>[{entry.type}]</span>
               </div>
-              <p className="mt-1 text-zinc-300">{entry.message}</p>
+              <p className="mt-1 whitespace-pre-wrap text-zinc-300">{entry.message}</p>
             </div>
           ))
         )}

@@ -15,23 +15,26 @@ Payments are real Razorpay **test-mode** calls: capture, authorize-only hold, or
 npm install
 cp .env.example .env.local
 # fill RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, ANTHROPIC_API_KEY
+# optional: DATA_GOV_IN_API_KEY for MCA live lookup
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Ask for a **goal**, not a seller name, e.g. “Get me the best banana bread you can find”.
+Open [http://localhost:3000](http://localhost:3000). Ask for a **goal** (e.g. "Get me the best banana bread you can find") or name a **real company outside the seed catalog** (e.g. "Pay Infosys Limited ₹250") for live MCA lookup.
 
 ## How a purchase works
 
-1. User sends a goal (item + optional budget). Demo buttons never name a seller.
-2. The agent filters the public catalog (name, category, listings) and calls `checkTrust` on **each** relevant seller.
-3. It compares price vs trust vs policy, then `authorizeOrCapture` or `refuse`.
-4. Chat shows the comparison (scores appear **after** evaluation). The side panel stays a public catalog unless Dev mode is on.
+1. User sends a goal or names a merchant outside the catalog.
+2. Seed sellers: agent calls `checkTrust` on each relevant catalog match.
+3. Unknown merchants: agent calls `lookupUnknownMerchant` → live MCA registry → confidence + risk.
+4. Compare trust, confidence, price, and policy; then `authorizeOrCapture` or `refuse`.
+5. Audit log entries tagged `[live-lookup]` are highlighted in the UI.
 
 | Trust + policy outcome | Razorpay |
 |------------------------|----------|
 | High trust, within rules | Authorize **and** capture |
 | Medium trust, or over `confirm_above_amount` (₹300) | Authorize only (hold) |
 | Low trust, or over hard max | No Razorpay call |
+| Low **confidence** (registry miss) | Trial hold capped at ₹200 — insufficient verifiable history |
 
 ### Demo paths
 
@@ -41,8 +44,19 @@ Open [http://localhost:3000](http://localhost:3000). Ask for a **goal**, not a s
 | Indian food, safely | Cheap meal kit vs established restaurant |
 | Phone case, best price | Gaming seller (`DealDash Express`) is cheapest at ₹89 |
 | Coffee tasting ~₹450 | High-trust seller still **held** by user policy |
+| Pay Infosys ₹250 | Live MCA lookup for a real company outside seed data |
 
 Dev mode (seller panel, **off** by default) reloads scores for debugging. It is not the demo view.
+
+### Live MCA lookup
+
+Merchants not in `data/sellers.json` are looked up via India's Open Government Data **Company Master Data** (MCA registry). Risk (transaction signals) and confidence (registry verification) are separate:
+
+- **High confidence** + clean risk → normal spend limits
+- **Low confidence** (not found / thin registry) → ₹200 trial hold, not refusal
+- **Adverse registry status** (struck-off) → refuse regardless of confidence
+
+Optional `DATA_GOV_IN_API_KEY` in `.env.local` (register at [data.gov.in](https://data.gov.in)). Without it, a public sample key is used (rate-limited).
 
 ## User policy
 
@@ -65,10 +79,10 @@ Dev mode (seller panel, **off** by default) reloads scores for debugging. It is 
 ```bash
 curl -X POST http://localhost:3000/api/purchase \
   -H 'Content-Type: application/json' \
-  -d '{"message":"Buy a phone case, best price"}'
+  -d '{"message":"Pay Infosys Limited ₹250 for consulting"}'
 ```
 
-Deterministic evaluate (bypasses the agent):
+Deterministic evaluate (bypasses the agent; seed sellers only):
 
 ```bash
 curl -X POST http://localhost:3000/api/evaluate \
@@ -79,7 +93,7 @@ curl -X POST http://localhost:3000/api/evaluate \
 ## Scripts
 
 - `npm run dev` — Next.js App Router
-- `npm run test` — Vitest (`scoreSeller`, policy, Razorpay retry, env parse)
+- `npm run test` — Vitest (scoreSeller, confidence, mcaLookup, policy, Razorpay retry, env parse)
 - `npm run build` — production build
 
 ## Repo
