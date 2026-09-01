@@ -12,8 +12,12 @@ export async function generateExplanation(
   const facts = {
     seller: sellerName,
     amount,
-    trustScore: decision.score,
-    tier: decision.tier,
+    trustScore: decision.effectiveScore,
+    tier: decision.effectiveTier,
+    riskScore: decision.riskScore,
+    riskTier: decision.riskTier,
+    effectiveScore: decision.effectiveScore,
+    effectiveTier: decision.effectiveTier,
     trustReason: decision.trustReason,
     policyReason: decision.policyReason,
     finalAction: decision.action,
@@ -25,8 +29,10 @@ export async function generateExplanation(
     candidates: comparison.map((c) => ({
       seller: c.sellerName,
       amount: c.amount,
-      score: c.score,
-      tier: c.tier,
+      score: c.effectiveScore,
+      tier: c.effectiveTier,
+      riskScore: c.riskScore,
+      riskTier: c.riskTier,
       action: c.recommendedAction,
       liveLookup: c.liveLookup,
       confidenceBand: c.confidenceBand,
@@ -44,7 +50,7 @@ export async function generateExplanation(
     const { text } = await generateText({
       model: anthropic("claude-sonnet-4-5"),
       system:
-        "You explain TrustGate payment decisions in 1-3 short sentences. Compare candidates when more than one was evaluated (price vs trust). Be specific about scores and policy. Use ₹ for amounts. When confidence data is present, clearly separate RISK (trust score, dispute signals) from CONFIDENCE (registry verification). Say 'insufficient verifiable history' for low confidence, never 'looks risky' for that case. When high registry confidence approved a merchant with no transaction history, say registry verification drove approval — do NOT say medium trust tier caused a hold.",
+        "You explain TrustGate payment decisions in 1-3 short sentences. Compare candidates when more than one was evaluated (price vs trust). Be specific about scores and policy. Use ₹ for amounts. When confidence data is present, clearly separate RISK (raw transaction signals) from CONFIDENCE (registry verification). When riskScore differs from effectiveScore, mention both: raw signal score and registry-adjusted effective score. Say 'insufficient verifiable history' for low confidence, never 'looks risky' for that case. When high registry confidence approved a merchant with no transaction history, say registry verification drove approval — do NOT say medium trust tier caused a hold.",
       prompt: `Explain this decision: ${JSON.stringify(facts)}`,
       maxOutputTokens: 220,
     });
@@ -63,6 +69,10 @@ function buildFallbackExplanation(facts: {
   amount: number;
   trustScore: number;
   tier: string;
+  riskScore?: number;
+  riskTier?: string;
+  effectiveScore?: number;
+  effectiveTier?: string;
   trustReason: string;
   policyReason?: string;
   finalAction: string;
@@ -74,6 +84,8 @@ function buildFallbackExplanation(facts: {
     amount: number;
     score: number;
     tier: string;
+    riskScore?: number;
+    riskTier?: string;
   }>;
 }): string {
   const action =
@@ -83,7 +95,14 @@ function buildFallbackExplanation(facts: {
         ? "held for confirmation"
         : "refused";
 
-  let msg = `${action}: ${facts.seller} — trust score ${facts.trustScore} (${facts.tier}), ₹${facts.amount}. ${facts.trustReason}`;
+  const scoreLabel =
+    facts.riskScore !== undefined &&
+    facts.effectiveScore !== undefined &&
+    facts.riskScore !== facts.effectiveScore
+      ? `raw ${facts.riskScore} (${facts.riskTier}) → effective ${facts.effectiveScore} (${facts.effectiveTier})`
+      : `trust score ${facts.trustScore} (${facts.tier})`;
+
+  let msg = `${action}: ${facts.seller} — ${scoreLabel}, ₹${facts.amount}. ${facts.trustReason}`;
   if (facts.confidenceBand) {
     msg += ` Confidence: ${facts.confidenceBand}`;
     if (facts.confidenceReasons?.length) {

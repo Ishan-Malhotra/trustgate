@@ -67,6 +67,14 @@
 - **Done:** Editable user policy panel — changes persist via `PUT /api/config` and apply on the next purchase immediately
 - **Done:** Audit log layout — scroll contained in viewport; sellers panel capped so log stays on screen
 
+## Phase 9b — Registry trust floor + raw vs effective scoring
+- **Done:** `noHistoryPenalty` waived at source when `confidence.band === "high"` and signals are history-only (`trustSignals.ts`)
+- **Done:** Registry trust floor in `evaluateTrust` — effective score floored to 75 (level ≥80) or 55; `riskScore`/`riskTier` vs `effectiveScore`/`effectiveTier` on all decisions
+- **Done:** `getSpendLimit` bypasses low-tier cap for high-confidence history-only merchants — uses normal high-tier limits (₹3000+)
+- **Done:** Audit, reasoning chain, explanation, and chat UI show both raw and effective scores when they differ
+- **Done:** MCA lookup hardening — verified session cache, CIN retry, non-poisoning on API errors, `searchCompanyDetailed()` with distinct failure reasons
+- **Tests:** Infosys ₹500 capture, verified+bad-signals refuse, MCA verified-cache fallback, dual-score audit
+
 ## Repository
 - GitHub: https://github.com/Ishan-Malhotra/trustgate
 - README: [README.md](./README.md)

@@ -117,9 +117,22 @@ export function ChatPanel({
                         </div>
                         <p className="mt-1 text-zinc-400">
                           Trust{" "}
-                          <strong className={tierColor(check.tier)}>
-                            {check.score} ({check.tier})
-                          </strong>
+                          {check.riskScore !== undefined &&
+                          check.riskScore !== check.score ? (
+                            <>
+                              <span className="text-zinc-500">
+                                Raw {check.riskScore} ({check.riskTier})
+                              </span>
+                              {" → "}
+                              <strong className={tierColor(check.tier)}>
+                                {check.score} ({check.tier})
+                              </strong>
+                            </>
+                          ) : (
+                            <strong className={tierColor(check.tier)}>
+                              {check.score} ({check.tier})
+                            </strong>
+                          )}
                           {" · "}
                           <span className={actionColor(check.recommendedAction)}>
                             {actionLabel(check.recommendedAction)}

@@ -45,8 +45,14 @@ export interface UserPolicy {
 
 export interface TrustDecision {
   action: PaymentAction;
+  /** Alias for effectiveScore — used by decisions and spend limits */
   score: number;
+  /** Alias for effectiveTier — used by decisions and spend limits */
   tier: TrustTier;
+  riskScore: number;
+  riskTier: TrustTier;
+  effectiveScore: number;
+  effectiveTier: TrustTier;
   spendLimit: number | null;
   effectiveAmount: number;
   trustReason: string;
@@ -65,8 +71,14 @@ export interface SellerTrustCheck {
   sellerId: string;
   sellerName: string;
   amount: number;
+  /** Alias for effectiveScore */
   score: number;
+  /** Alias for effectiveTier */
   tier: TrustTier;
+  riskScore: number;
+  riskTier: TrustTier;
+  effectiveScore: number;
+  effectiveTier: TrustTier;
   spendLimit: number | null;
   recommendedAction: PaymentAction;
   trustReason: string;

@@ -1,5 +1,6 @@
-import type { TrustTier } from "@/lib/types";
+import type { TrustScoreResult, TrustTier } from "@/lib/types";
 import type { ConfidenceResult } from "./confidence";
+import { isUnverifiedHistoryOnly } from "./trustSignals";
 
 export const LIVE_TRIAL_SPEND_LIMIT = 200;
 const MEDIUM_CONFIDENCE_CAP = 800;
@@ -15,12 +16,15 @@ function baseSpendLimit(tier: TrustTier, score: number): number | null {
   return 1500;
 }
 
-function confidenceBackedLowTierLimit(score: number, band: ConfidenceResult["band"]): number {
+function confidenceBackedLowTierLimit(
+  score: number,
+  band: ConfidenceResult["band"]
+): number {
   if (band === "high") {
-    const effectiveScore = Math.max(score, 45);
+    const limitScore = Math.max(score, 55);
     return Math.max(
       100,
-      Math.min(800, Math.round(200 + (effectiveScore - 45) * 15))
+      Math.min(800, Math.round(200 + (limitScore - 45) * 15))
     );
   }
 
@@ -34,7 +38,8 @@ function confidenceBackedLowTierLimit(score: number, band: ConfidenceResult["ban
 export function getSpendLimit(
   tier: TrustTier,
   score: number,
-  confidence?: ConfidenceResult
+  confidence?: ConfidenceResult,
+  breakdown?: TrustScoreResult["breakdown"]
 ): number | null {
   if (!confidence) {
     if (tier === "low") return 0;
@@ -45,6 +50,14 @@ export function getSpendLimit(
 
   if (confidence.band === "low") {
     return LIVE_TRIAL_SPEND_LIMIT;
+  }
+
+  if (
+    confidence.band === "high" &&
+    breakdown &&
+    isUnverifiedHistoryOnly(breakdown)
+  ) {
+    return baseSpendLimit(tier, score);
   }
 
   if (tier === "low") {

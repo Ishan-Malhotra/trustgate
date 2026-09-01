@@ -1,4 +1,6 @@
 import type { Seller, TrustScoreResult, TrustTier } from "@/lib/types";
+import type { ConfidenceResult } from "./confidence";
+import { hasOnlyMissingHistoryGap } from "./trustSignals";
 
 const UNKNOWN_HISTORY_DISPUTE_SCORE = 25;
 
@@ -20,13 +22,16 @@ function disputeToScore(rate: number): number {
   return Math.round((1 - normalized) * 50);
 }
 
-function tierFromScore(score: number): TrustTier {
+export function tierFromScore(score: number): TrustTier {
   if (score >= 75) return "high";
   if (score >= 45) return "medium";
   return "low";
 }
 
-export function scoreSeller(seller: Seller): TrustScoreResult {
+export function scoreSeller(
+  seller: Seller,
+  confidence?: ConfidenceResult
+): TrustScoreResult {
   const hasTransactionHistory = seller.dispute_rate_history.length > 0;
   const weightedRate = hasTransactionHistory
     ? weightedDisputeRate(seller.dispute_rate_history)
@@ -34,14 +39,24 @@ export function scoreSeller(seller: Seller): TrustScoreResult {
   const disputeScore = hasTransactionHistory
     ? disputeToScore(weightedRate)
     : UNKNOWN_HISTORY_DISPUTE_SCORE;
-  const noHistoryPenalty = hasTransactionHistory ? 0 : 25;
+
+  const waiveNoHistoryPenalty =
+    confidence?.band === "high" && hasOnlyMissingHistoryGap(seller);
+  const noHistoryPenalty =
+    hasTransactionHistory || waiveNoHistoryPenalty ? 0 : 25;
+
   const kycBonus = seller.kyc_verified ? 15 : 0;
   const ageBonus = Math.min(Math.floor(seller.account_age_days / 365) * 3, 15);
   const returnPenalty = Math.round(Math.min(seller.return_rate / 0.2, 1) * 20);
   const volatilityPenalty = Math.round(Math.min(seller.price_volatility / 10, 1) * 15);
 
   const rawScore =
-    disputeScore + kycBonus + ageBonus - returnPenalty - volatilityPenalty;
+    disputeScore +
+    kycBonus +
+    ageBonus -
+    returnPenalty -
+    volatilityPenalty -
+    noHistoryPenalty;
   const score = Math.max(0, Math.min(100, rawScore));
 
   return {

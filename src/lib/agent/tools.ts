@@ -6,10 +6,10 @@ import { computeConfidence } from "@/lib/trust/confidence";
 import {
   buildLiveLookupReasoningChain,
   formatReasoningChain,
+  formatScoreSummary,
 } from "@/lib/trust/buildReasoningChain";
-import { scoreSeller } from "@/lib/trust/scoreSeller";
 import { getSellerById } from "@/lib/sellers";
-import { searchCompany } from "@/lib/registry/mcaLookup";
+import { searchCompanyDetailed } from "@/lib/registry/mcaLookup";
 import { sellerFromMca } from "@/lib/registry/sellerFromMca";
 import { logAudit } from "@/lib/audit/logger";
 import { executeApprovedPayment } from "@/lib/razorpay/executePayment";
@@ -49,6 +49,10 @@ function storeTrustDecision(
     amount,
     score: finalDecision.score,
     tier: finalDecision.tier,
+    riskScore: finalDecision.riskScore,
+    riskTier: finalDecision.riskTier,
+    effectiveScore: finalDecision.effectiveScore,
+    effectiveTier: finalDecision.effectiveTier,
     spendLimit: finalDecision.spendLimit,
     recommendedAction: finalDecision.action,
     trustReason: finalDecision.trustReason,
@@ -92,6 +96,10 @@ export function createBuyerTools(
         amount,
         score: finalDecision.score,
         tier: finalDecision.tier,
+        riskScore: finalDecision.riskScore,
+        riskTier: finalDecision.riskTier,
+        effectiveScore: finalDecision.effectiveScore,
+        effectiveTier: finalDecision.effectiveTier,
         spendLimit: finalDecision.spendLimit,
         action: finalDecision.action,
         breakdown: finalDecision.breakdown,
@@ -111,6 +119,10 @@ export function createBuyerTools(
         sellerName: seller.name,
         score: finalDecision.score,
         tier: finalDecision.tier,
+        riskScore: finalDecision.riskScore,
+        riskTier: finalDecision.riskTier,
+        effectiveScore: finalDecision.effectiveScore,
+        effectiveTier: finalDecision.effectiveTier,
         spendLimit: finalDecision.spendLimit,
         recommendedAction: finalDecision.action,
         effectiveAmount: finalDecision.effectiveAmount,
@@ -128,10 +140,10 @@ export function createBuyerTools(
       amount: z.number().positive(),
     }),
     execute: async ({ name, amount }) => {
-      const mcaRecord = await searchCompany(name);
+      const lookupResult = await searchCompanyDetailed(name);
+      const mcaRecord = lookupResult.record;
       const confidence = computeConfidence(mcaRecord);
       const seller = sellerFromMca(name, mcaRecord);
-      const scoreResult = scoreSeller(seller);
 
       ctx.liveMerchants[seller.id] = seller;
 
@@ -146,8 +158,8 @@ export function createBuyerTools(
         merchantName: name,
         amount,
         mcaRecord,
+        lookupResult,
         confidence,
-        scoreResult,
         finalDecision,
       });
 
@@ -167,20 +179,28 @@ export function createBuyerTools(
         { sellerId: seller.id, amount }
       );
 
+      const scoreSummary = formatScoreSummary(finalDecision);
+
       logAudit(
         "trust_check",
-        `[live-lookup] Trust check for ${seller.name}`,
+        `[live-lookup] Trust check for ${seller.name} — ${scoreSummary}`,
         {
           sellerId: seller.id,
           amount,
           score: finalDecision.score,
           tier: finalDecision.tier,
+          riskScore: finalDecision.riskScore,
+          riskTier: finalDecision.riskTier,
+          effectiveScore: finalDecision.effectiveScore,
+          effectiveTier: finalDecision.effectiveTier,
           spendLimit: finalDecision.spendLimit,
           action: finalDecision.action,
           confidenceLevel: finalDecision.confidenceLevel,
           confidenceBand: finalDecision.confidenceBand,
           confidenceReasons: finalDecision.confidenceReasons,
           mcaFound: Boolean(mcaRecord),
+          lookupSource: lookupResult.source,
+          lookupFailureReason: lookupResult.failureReason,
           breakdown: finalDecision.breakdown,
         }
       );
@@ -202,6 +222,10 @@ export function createBuyerTools(
         sellerName: seller.name,
         score: finalDecision.score,
         tier: finalDecision.tier,
+        riskScore: finalDecision.riskScore,
+        riskTier: finalDecision.riskTier,
+        effectiveScore: finalDecision.effectiveScore,
+        effectiveTier: finalDecision.effectiveTier,
         spendLimit: finalDecision.spendLimit,
         recommendedAction: finalDecision.action,
         effectiveAmount: finalDecision.effectiveAmount,
@@ -210,6 +234,8 @@ export function createBuyerTools(
         confidenceLevel: finalDecision.confidenceLevel,
         confidenceBand: finalDecision.confidenceBand,
         confidenceReasons: finalDecision.confidenceReasons,
+        lookupFailureReason: lookupResult.failureReason,
+        lookupSource: lookupResult.source,
         reasoningChain,
         mcaRecord: mcaRecord
           ? {
