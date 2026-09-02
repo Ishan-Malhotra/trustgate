@@ -7,6 +7,10 @@ const baseDecision: TrustDecision = {
   action: "capture",
   score: 82,
   tier: "high",
+  riskScore: 82,
+  riskTier: "high",
+  effectiveScore: 82,
+  effectiveTier: "high",
   spendLimit: null,
   effectiveAmount: 250,
   trustReason: "High trust",
@@ -17,6 +21,8 @@ const baseDecision: TrustDecision = {
     returnPenalty: 2,
     volatilityPenalty: 1,
     weightedDisputeRate: 0.01,
+    transactionHistoryKnown: true,
+    noHistoryPenalty: 0,
   },
 };
 

@@ -18,6 +18,17 @@ function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+async function persistPolicy(policy: UserPolicy): Promise<UserPolicy> {
+  const res = await fetch("/api/config", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(policy),
+  });
+  if (!res.ok) throw new Error("Failed to save policy");
+  const data = await res.json();
+  return data.userPolicy as UserPolicy;
+}
+
 export function TrustGateApp() {
   const [sellers, setSellers] = useState<CatalogSeller[]>([]);
   const [userPolicy, setUserPolicy] = useState<UserPolicy>(USER_POLICY);
@@ -34,15 +45,22 @@ export function TrustGateApp() {
   const [razorpayConfigured, setRazorpayConfigured] = useState(false);
   const [bootError, setBootError] = useState<string>();
 
-  const fetchSellers = useCallback(async (showScores: boolean) => {
-    const res = await fetch(showScores ? "/api/sellers?dev=1" : "/api/sellers");
-    if (!res.ok) throw new Error("Failed to load sellers");
-    const data: SellersResponse = await res.json();
-    setSellers(data.sellers);
-    setUserPolicy(data.userPolicy);
-    setLlmConfigured(Boolean(data.llmConfigured));
-    setRazorpayConfigured(Boolean(data.razorpayConfigured));
-  }, []);
+  const fetchSellers = useCallback(
+    async (showScores: boolean, options?: { syncPolicy?: boolean }) => {
+      const res = await fetch(
+        showScores ? "/api/sellers?dev=1" : "/api/sellers"
+      );
+      if (!res.ok) throw new Error("Failed to load sellers");
+      const data: SellersResponse = await res.json();
+      setSellers(data.sellers);
+      if (options?.syncPolicy) {
+        setUserPolicy(data.userPolicy);
+      }
+      setLlmConfigured(Boolean(data.llmConfigured));
+      setRazorpayConfigured(Boolean(data.razorpayConfigured));
+    },
+    []
+  );
 
   const fetchAuditLog = useCallback(async () => {
     setLogLoading(true);
@@ -57,7 +75,7 @@ export function TrustGateApp() {
   }, []);
 
   useEffect(() => {
-    fetchSellers(false).catch((err) =>
+    fetchSellers(false, { syncPolicy: true }).catch((err) =>
       setBootError(err instanceof Error ? err.message : "Boot failed")
     );
     fetchAuditLog();
@@ -71,11 +89,28 @@ export function TrustGateApp() {
     );
   };
 
-  async function runPurchase(message: string): Promise<PurchaseResponse> {
+  const handlePolicyChange = (policy: UserPolicy) => {
+    setUserPolicy(policy);
+    void persistPolicy(policy).catch(() => {
+      /* local state still applies to next purchase body */
+    });
+  };
+
+  const handlePolicyReset = () => {
+    void fetch("/api/config", { method: "DELETE" })
+      .then((res) => res.json())
+      .then((data) => setUserPolicy(data.userPolicy as UserPolicy))
+      .catch(() => setUserPolicy(USER_POLICY));
+  };
+
+  async function runPurchase(
+    message: string,
+    policy: UserPolicy
+  ): Promise<PurchaseResponse> {
     const res = await fetch("/api/purchase", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, userPolicy: policy }),
     });
     if (!res.ok) throw new Error("Agent request failed");
     return res.json();
@@ -89,7 +124,7 @@ export function TrustGateApp() {
     ]);
 
     try {
-      const agentResult = await runPurchase(message);
+      const agentResult = await runPurchase(message, userPolicy);
       const decision = agentResult.decision;
       const explanation = agentResult.explanation;
       const payment = agentResult.payment;
@@ -146,7 +181,7 @@ export function TrustGateApp() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 lg:p-6">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 lg:p-6">
       <header className="shrink-0">
         <h1 className="text-xl font-semibold tracking-tight text-zinc-100">
           TrustGate
@@ -171,8 +206,8 @@ export function TrustGateApp() {
         </p>
       </header>
 
-      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-5">
-        <div className="flex min-h-[480px] flex-col lg:col-span-3 lg:min-h-0">
+      <div className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-5">
+        <div className="flex min-h-0 flex-col overflow-hidden lg:col-span-3">
           <ChatPanel
             messages={messages}
             loading={loading}
@@ -181,15 +216,21 @@ export function TrustGateApp() {
           />
         </div>
 
-        <div className="flex min-h-0 flex-col gap-4 lg:col-span-2">
-          <PolicyPanel policy={userPolicy} />
-          <SellerPanel
-            sellers={sellers}
-            revealedById={revealedById}
-            chosenSellerId={chosenSellerId}
-            devMode={devMode}
-            onToggleDevMode={handleToggleDevMode}
+        <div className="flex min-h-0 flex-col gap-4 overflow-hidden lg:col-span-2">
+          <PolicyPanel
+            policy={userPolicy}
+            onPolicyChange={handlePolicyChange}
+            onReset={handlePolicyReset}
           />
+          <div className="max-h-44 shrink-0 overflow-y-auto">
+            <SellerPanel
+              sellers={sellers}
+              revealedById={revealedById}
+              chosenSellerId={chosenSellerId}
+              devMode={devMode}
+              onToggleDevMode={handleToggleDevMode}
+            />
+          </div>
           <AuditLogPanel entries={auditLog} loading={logLoading} />
         </div>
       </div>

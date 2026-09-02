@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getSellerById } from "@/lib/sellers";
 import { evaluateTrust } from "@/lib/trust/evaluateTrust";
 import { applyUserPolicy } from "@/lib/policy/applyUserPolicy";
-import { USER_POLICY } from "@/lib/config/userPolicy";
+import { getUserPolicy } from "@/lib/config/runtimePolicy";
 import { generateExplanation } from "@/lib/explanation/generateExplanation";
 import { logAudit, getAuditLog } from "@/lib/audit/logger";
 import { executeApprovedPayment } from "@/lib/razorpay/executePayment";
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   }
 
   const trustDecision = evaluateTrust(seller, amount);
-  const finalDecision = applyUserPolicy(trustDecision, amount, USER_POLICY);
+  const finalDecision = applyUserPolicy(trustDecision, amount, getUserPolicy());
 
   logAudit("trust_check", `Evaluated ${seller.name}`, {
     sellerId,
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
     decision: finalDecision,
     explanation,
     payment,
-    userPolicy: USER_POLICY,
+    userPolicy: getUserPolicy(),
     auditLog: getAuditLog(),
   });
 }

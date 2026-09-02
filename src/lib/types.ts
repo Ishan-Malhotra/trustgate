@@ -31,6 +31,8 @@ export interface TrustScoreResult {
     returnPenalty: number;
     volatilityPenalty: number;
     weightedDisputeRate: number;
+    transactionHistoryKnown: boolean;
+    noHistoryPenalty: number;
   };
 }
 
@@ -43,12 +45,21 @@ export interface UserPolicy {
 
 export interface TrustDecision {
   action: PaymentAction;
+  /** Alias for effectiveScore — used by decisions and spend limits */
   score: number;
+  /** Alias for effectiveTier — used by decisions and spend limits */
   tier: TrustTier;
+  riskScore: number;
+  riskTier: TrustTier;
+  effectiveScore: number;
+  effectiveTier: TrustTier;
   spendLimit: number | null;
   effectiveAmount: number;
   trustReason: string;
   breakdown: TrustScoreResult["breakdown"];
+  confidenceLevel?: number;
+  confidenceBand?: "high" | "medium" | "low";
+  confidenceReasons?: string[];
 }
 
 export interface FinalDecision extends TrustDecision {
@@ -60,12 +71,22 @@ export interface SellerTrustCheck {
   sellerId: string;
   sellerName: string;
   amount: number;
+  /** Alias for effectiveScore */
   score: number;
+  /** Alias for effectiveTier */
   tier: TrustTier;
+  riskScore: number;
+  riskTier: TrustTier;
+  effectiveScore: number;
+  effectiveTier: TrustTier;
   spendLimit: number | null;
   recommendedAction: PaymentAction;
   trustReason: string;
   policyReason?: string;
+  confidenceLevel?: number;
+  confidenceBand?: "high" | "medium" | "low";
+  confidenceReasons?: string[];
+  liveLookup?: boolean;
 }
 
 export interface AuditEntry {
@@ -78,6 +99,7 @@ export interface AuditEntry {
     | "refusal"
     | "error"
     | "agent"
+    | "reasoning"
     | "flagged";
   message: string;
   details?: Record<string, unknown>;

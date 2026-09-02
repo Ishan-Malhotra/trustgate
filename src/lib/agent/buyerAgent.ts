@@ -4,7 +4,9 @@ import { generateExplanation } from "@/lib/explanation/generateExplanation";
 import { getAllSellers, getSellerById } from "@/lib/sellers";
 import { logAudit, getAuditLog } from "@/lib/audit/logger";
 import { getAnthropicProvider, missingAnthropicConfigMessage } from "@/lib/config/anthropic";
+import type { UserPolicy } from "@/lib/types";
 import type { PaymentExecutionResult } from "@/lib/razorpay/executePayment";
+import { getUserPolicy } from "@/lib/config/runtimePolicy";
 
 function buildSystemPrompt(): string {
   const catalog = getAllSellers()
@@ -42,7 +44,14 @@ POLICY (strict):
 Seller catalog (public listings only — trust is unknown until checkTrust):
 ${catalog}
 
-Amounts are in INR (₹).`;
+Amounts are in INR (₹).
+
+LIVE MERCHANT LOOKUP (merchants NOT in the catalog above):
+- If the user names a specific real company that is NOT a seller-00x id, call lookupUnknownMerchant(name, amount) instead of checkTrust.
+- Never invent a seed seller id for an unknown merchant.
+- Never refuse solely because a merchant is "new to us" — use the confidence assessment from lookupUnknownMerchant.
+- Follow recommendedAction from lookupUnknownMerchant exactly (capture vs hold vs refuse). High MCA confidence can approve capture even when risk score is medium due to missing transaction history — that is expected, not a reason to hold.
+- Distinguish in your explanation: "insufficient verifiable history" (low confidence) vs "signals look bad" (high risk / adverse registry).`;
 }
 
 export interface PurchaseRequestResult {
@@ -56,13 +65,16 @@ export interface PurchaseRequestResult {
 }
 
 export async function runBuyerAgent(
-  userMessage: string
+  userMessage: string,
+  userPolicy?: UserPolicy
 ): Promise<PurchaseRequestResult> {
+  const activePolicy = userPolicy ?? getUserPolicy();
   const ctx: AgentContext = {
     decisionsBySellerId: {},
     trustChecks: [],
+    liveMerchants: {},
   };
-  const tools = createBuyerTools(ctx);
+  const tools = createBuyerTools(ctx, activePolicy);
 
   logAudit("agent", `User request: ${userMessage}`);
 
@@ -89,11 +101,24 @@ export async function runBuyerAgent(
 
     responseText = text;
 
+    if (responseText.trim()) {
+      logAudit("reasoning", "Agent conclusion", {
+        response: responseText.trim(),
+      });
+    }
+
     for (const step of steps) {
       if (step.toolCalls) {
         for (const call of step.toolCalls) {
           logAudit("agent", `Tool call: ${call.toolName}`, {
             input: call.input,
+          });
+        }
+      }
+      if (step.toolResults) {
+        for (const result of step.toolResults) {
+          logAudit("reasoning", `Tool result: ${result.toolName}`, {
+            output: result.output,
           });
         }
       }
@@ -117,7 +142,9 @@ export async function runBuyerAgent(
   let explanation: string | undefined;
   if (ctx.lastDecision) {
     const chosenId = ctx.chosenSellerId;
-    const chosenSeller = chosenId ? getSellerById(chosenId) : undefined;
+    const chosenSeller = chosenId
+      ? (getSellerById(chosenId) ?? ctx.liveMerchants[chosenId])
+      : undefined;
     const chosenCheck = chosenId
       ? ctx.trustChecks.find((c) => c.sellerId === chosenId)
       : ctx.trustChecks[ctx.trustChecks.length - 1];

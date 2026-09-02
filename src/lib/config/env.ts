@@ -54,3 +54,7 @@ export function getAnthropicWorkspaceId(): string | undefined {
 export function isLlmConfigured(): boolean {
   return Boolean(getAnthropicApiKey());
 }
+
+export function getDataGovInApiKey(): string | undefined {
+  return getEnvValue("DATA_GOV_IN_API_KEY");
+}

@@ -52,6 +52,34 @@
 - **Done:** Demo buttons: cheapest banana bread; Indian food safely; phone case best price; coffee tasting ~₹450 (policy hold)
 - **Done:** Default `GET /api/sellers` omits score fields so the catalog cannot be eyeballed as a ranked list
 
+## Phase 9 — Live MCA lookup + confidence-based spend
+- **Done:** `searchCompany()` — data.gov.in MCA Company Master Data API, exact name/CIN filters, suffix retries, in-memory cache, graceful null on errors
+- **Done:** `computeConfidence()` — separate confidence band from risk; adverse MCA status elevates risk independently
+- **Done:** `scoreSeller()` empty-history guard — `dispute_rate_history: []` is unknown, not maximal-clean
+- **Done:** `evaluateTrust(seller, amount, confidence?)` — low confidence → ₹200 trial hold ("insufficient verifiable history")
+- **Done:** Agent tool `lookupUnknownMerchant`; seed catalog path unchanged
+- **Done:** Audit log `[live-lookup]` highlighted in UI; Infosys demo button
+- **Env:** `DATA_GOV_IN_API_KEY` (optional)
+- **Tests:** confidence, empty-history regression, mcaLookup (mocked fetch)
+- **Next step:** GST verification; fuzzy MCA name matching
+- **Fix:** High MCA confidence + unverified transaction history → capture (not medium-tier hold); structured reasoning chain in audit log
+- **Fix:** `getSpendLimit()` no longer refuses low-tier merchants before checking confidence — high/medium registry confidence now sets a spend ceiling instead of returning 0; registry-verified capture applies to low tier too
+- **Done:** Editable user policy panel — changes persist via `PUT /api/config` and apply on the next purchase immediately
+- **Done:** Audit log layout — scroll contained in viewport; sellers panel capped so log stays on screen
+
+## Phase 9b — Registry trust floor + raw vs effective scoring
+- **Done:** `noHistoryPenalty` waived at source when `confidence.band === "high"` and signals are history-only (`trustSignals.ts`)
+- **Done:** Registry trust floor in `evaluateTrust` — effective score floored to 75 (level ≥80) or 55; `riskScore`/`riskTier` vs `effectiveScore`/`effectiveTier` on all decisions
+- **Done:** `getSpendLimit` bypasses low-tier cap for high-confidence history-only merchants — uses normal high-tier limits (₹3000+)
+- **Done:** Audit, reasoning chain, explanation, and chat UI show both raw and effective scores when they differ
+- **Done:** MCA lookup hardening — verified session cache, CIN retry, non-poisoning on API errors, `searchCompanyDetailed()` with distinct failure reasons
+- **Tests:** Infosys ₹500 capture, verified+bad-signals refuse, MCA verified-cache fallback, dual-score audit
+
+## Prep doc
+- **Done:** `PREP.md` — full codebase explainer for demo prep (product idea, seed sellers, trust/confidence/policy, agent tools, MCA, Razorpay, UI, demo checklist)
+- **Done:** `.cursorrules` updated — after every step/phase, update `PREP.md` so it stays accurate
+
 ## Repository
 - GitHub: https://github.com/Ishan-Malhotra/trustgate
 - README: [README.md](./README.md)
+- Prep notes: [PREP.md](./PREP.md)

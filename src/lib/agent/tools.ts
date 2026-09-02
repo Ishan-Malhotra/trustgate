@@ -1,13 +1,21 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { USER_POLICY } from "@/lib/config/userPolicy";
 import { applyUserPolicy } from "@/lib/policy/applyUserPolicy";
 import { evaluateTrust } from "@/lib/trust/evaluateTrust";
+import { computeConfidence } from "@/lib/trust/confidence";
+import {
+  buildLiveLookupReasoningChain,
+  formatReasoningChain,
+  formatScoreSummary,
+} from "@/lib/trust/buildReasoningChain";
 import { getSellerById } from "@/lib/sellers";
+import { searchCompanyDetailed } from "@/lib/registry/mcaLookup";
+import { sellerFromMca } from "@/lib/registry/sellerFromMca";
 import { logAudit } from "@/lib/audit/logger";
 import { executeApprovedPayment } from "@/lib/razorpay/executePayment";
-import type { FinalDecision, SellerTrustCheck } from "@/lib/types";
+import type { FinalDecision, Seller, SellerTrustCheck, UserPolicy } from "@/lib/types";
 import type { PaymentExecutionResult } from "@/lib/razorpay/executePayment";
+import { getUserPolicy } from "@/lib/config/runtimePolicy";
 
 export interface AgentContext {
   lastDecision?: FinalDecision;
@@ -16,12 +24,53 @@ export interface AgentContext {
   chosenSellerId?: string;
   decisionsBySellerId: Record<string, FinalDecision>;
   trustChecks: SellerTrustCheck[];
+  liveMerchants: Record<string, Seller>;
 }
 
-export function createBuyerTools(ctx: AgentContext) {
+function resolveSeller(
+  sellerId: string,
+  ctx: AgentContext
+): Seller | undefined {
+  return getSellerById(sellerId) ?? ctx.liveMerchants[sellerId];
+}
+
+function storeTrustDecision(
+  ctx: AgentContext,
+  seller: Seller,
+  amount: number,
+  finalDecision: FinalDecision,
+  options?: { liveLookup?: boolean }
+) {
+  ctx.lastDecision = finalDecision;
+  ctx.decisionsBySellerId[seller.id] = finalDecision;
+  ctx.trustChecks.push({
+    sellerId: seller.id,
+    sellerName: seller.name,
+    amount,
+    score: finalDecision.score,
+    tier: finalDecision.tier,
+    riskScore: finalDecision.riskScore,
+    riskTier: finalDecision.riskTier,
+    effectiveScore: finalDecision.effectiveScore,
+    effectiveTier: finalDecision.effectiveTier,
+    spendLimit: finalDecision.spendLimit,
+    recommendedAction: finalDecision.action,
+    trustReason: finalDecision.trustReason,
+    policyReason: finalDecision.policyReason,
+    confidenceLevel: finalDecision.confidenceLevel,
+    confidenceBand: finalDecision.confidenceBand,
+    confidenceReasons: finalDecision.confidenceReasons,
+    liveLookup: options?.liveLookup,
+  });
+}
+
+export function createBuyerTools(
+  ctx: AgentContext,
+  userPolicy: UserPolicy = getUserPolicy()
+) {
   const checkTrust = tool({
     description:
-      "Check seller trust score and spending limit. Call on EVERY relevant seller before choosing. MUST be called before any payment action.",
+      "Check seller trust score and spending limit. Call on EVERY relevant seed-catalog seller before choosing. MUST be called before any payment action.",
     inputSchema: z.object({
       sellerId: z.string(),
       amount: z.number().positive(),
@@ -37,28 +86,20 @@ export function createBuyerTools(ctx: AgentContext) {
       const finalDecision = applyUserPolicy(
         trustDecision,
         amount,
-        USER_POLICY
+        userPolicy
       );
 
-      ctx.lastDecision = finalDecision;
-      ctx.decisionsBySellerId[sellerId] = finalDecision;
-      ctx.trustChecks.push({
-        sellerId,
-        sellerName: seller.name,
-        amount,
-        score: finalDecision.score,
-        tier: finalDecision.tier,
-        spendLimit: finalDecision.spendLimit,
-        recommendedAction: finalDecision.action,
-        trustReason: finalDecision.trustReason,
-        policyReason: finalDecision.policyReason,
-      });
+      storeTrustDecision(ctx, seller, amount, finalDecision);
 
       logAudit("trust_check", `Trust check for ${seller.name}`, {
         sellerId,
         amount,
         score: finalDecision.score,
         tier: finalDecision.tier,
+        riskScore: finalDecision.riskScore,
+        riskTier: finalDecision.riskTier,
+        effectiveScore: finalDecision.effectiveScore,
+        effectiveTier: finalDecision.effectiveTier,
         spendLimit: finalDecision.spendLimit,
         action: finalDecision.action,
         breakdown: finalDecision.breakdown,
@@ -70,7 +111,7 @@ export function createBuyerTools(ctx: AgentContext) {
         originalAction: finalDecision.originalAction,
         finalAction: finalDecision.action,
         policyReason: finalDecision.policyReason,
-        confirmThreshold: USER_POLICY.confirm_above_amount,
+        confirmThreshold: userPolicy.confirm_above_amount,
       });
 
       return {
@@ -78,6 +119,10 @@ export function createBuyerTools(ctx: AgentContext) {
         sellerName: seller.name,
         score: finalDecision.score,
         tier: finalDecision.tier,
+        riskScore: finalDecision.riskScore,
+        riskTier: finalDecision.riskTier,
+        effectiveScore: finalDecision.effectiveScore,
+        effectiveTier: finalDecision.effectiveTier,
         spendLimit: finalDecision.spendLimit,
         recommendedAction: finalDecision.action,
         effectiveAmount: finalDecision.effectiveAmount,
@@ -87,16 +132,136 @@ export function createBuyerTools(ctx: AgentContext) {
     },
   });
 
+  const lookupUnknownMerchant = tool({
+    description:
+      "Look up a merchant NOT in the seed catalog via India's MCA Company Master Data registry. Use when the user names a real company that is not a seller-00x id. Returns trust + confidence assessment. MUST be called before payment for unknown merchants.",
+    inputSchema: z.object({
+      name: z.string().min(1),
+      amount: z.number().positive(),
+    }),
+    execute: async ({ name, amount }) => {
+      const lookupResult = await searchCompanyDetailed(name);
+      const mcaRecord = lookupResult.record;
+      const confidence = computeConfidence(mcaRecord);
+      const seller = sellerFromMca(name, mcaRecord);
+
+      ctx.liveMerchants[seller.id] = seller;
+
+      const trustDecision = evaluateTrust(seller, amount, confidence);
+      const finalDecision = applyUserPolicy(
+        trustDecision,
+        amount,
+        userPolicy
+      );
+
+      const reasoningChain = buildLiveLookupReasoningChain({
+        merchantName: name,
+        amount,
+        mcaRecord,
+        lookupResult,
+        confidence,
+        finalDecision,
+      });
+
+      storeTrustDecision(ctx, seller, amount, finalDecision, {
+        liveLookup: true,
+      });
+
+      logAudit(
+        "reasoning",
+        `[live-lookup] Decision chain for ${seller.name}`,
+        { sellerId: seller.id, steps: reasoningChain }
+      );
+
+      logAudit(
+        "agent",
+        `[live-lookup] Reasoning:\n${formatReasoningChain(reasoningChain)}`,
+        { sellerId: seller.id, amount }
+      );
+
+      const scoreSummary = formatScoreSummary(finalDecision);
+
+      logAudit(
+        "trust_check",
+        `[live-lookup] Trust check for ${seller.name} — ${scoreSummary}`,
+        {
+          sellerId: seller.id,
+          amount,
+          score: finalDecision.score,
+          tier: finalDecision.tier,
+          riskScore: finalDecision.riskScore,
+          riskTier: finalDecision.riskTier,
+          effectiveScore: finalDecision.effectiveScore,
+          effectiveTier: finalDecision.effectiveTier,
+          spendLimit: finalDecision.spendLimit,
+          action: finalDecision.action,
+          confidenceLevel: finalDecision.confidenceLevel,
+          confidenceBand: finalDecision.confidenceBand,
+          confidenceReasons: finalDecision.confidenceReasons,
+          mcaFound: Boolean(mcaRecord),
+          lookupSource: lookupResult.source,
+          lookupFailureReason: lookupResult.failureReason,
+          breakdown: finalDecision.breakdown,
+        }
+      );
+
+      logAudit(
+        "policy_check",
+        `[live-lookup] Policy applied for ${seller.name}`,
+        {
+          sellerId: seller.id,
+          amount,
+          originalAction: finalDecision.originalAction,
+          finalAction: finalDecision.action,
+          policyReason: finalDecision.policyReason,
+        }
+      );
+
+      return {
+        sellerId: seller.id,
+        sellerName: seller.name,
+        score: finalDecision.score,
+        tier: finalDecision.tier,
+        riskScore: finalDecision.riskScore,
+        riskTier: finalDecision.riskTier,
+        effectiveScore: finalDecision.effectiveScore,
+        effectiveTier: finalDecision.effectiveTier,
+        spendLimit: finalDecision.spendLimit,
+        recommendedAction: finalDecision.action,
+        effectiveAmount: finalDecision.effectiveAmount,
+        trustReason: finalDecision.trustReason,
+        policyReason: finalDecision.policyReason,
+        confidenceLevel: finalDecision.confidenceLevel,
+        confidenceBand: finalDecision.confidenceBand,
+        confidenceReasons: finalDecision.confidenceReasons,
+        lookupFailureReason: lookupResult.failureReason,
+        lookupSource: lookupResult.source,
+        reasoningChain,
+        mcaRecord: mcaRecord
+          ? {
+              cin: mcaRecord.cin,
+              companyName: mcaRecord.companyName,
+              status: mcaRecord.status,
+              registrationDate: mcaRecord.registrationDate,
+              paidupCapital: mcaRecord.paidupCapital,
+              state: mcaRecord.state,
+            }
+          : null,
+        liveLookup: true,
+      };
+    },
+  });
+
   const authorizeOrCapture = tool({
     description:
-      "Authorize or capture payment for a seller. Only call AFTER checkTrust. Never exceed spend limit.",
+      "Authorize or capture payment for a seller. Only call AFTER checkTrust or lookupUnknownMerchant. Never exceed spend limit.",
     inputSchema: z.object({
       sellerId: z.string(),
       amount: z.number().positive(),
       action: z.enum(["capture", "hold"]),
     }),
     execute: async ({ sellerId, amount, action }) => {
-      const seller = getSellerById(sellerId);
+      const seller = resolveSeller(sellerId, ctx);
       if (!seller) {
         return { error: `Seller not found: ${sellerId}` };
       }
@@ -156,12 +321,12 @@ export function createBuyerTools(ctx: AgentContext) {
       reason: z.string(),
     }),
     execute: async ({ sellerId, reason }) => {
-      const seller = getSellerById(sellerId);
+      const seller = resolveSeller(sellerId, ctx);
       const name = seller?.name ?? sellerId;
       logAudit("refusal", `Refused ${name}: ${reason}`, { sellerId, reason });
       return { refused: true, sellerId, reason };
     },
   });
 
-  return { checkTrust, authorizeOrCapture, refuse };
+  return { checkTrust, lookupUnknownMerchant, authorizeOrCapture, refuse };
 }
