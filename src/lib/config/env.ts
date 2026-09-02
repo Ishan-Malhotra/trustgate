@@ -58,3 +58,14 @@ export function isLlmConfigured(): boolean {
 export function getDataGovInApiKey(): string | undefined {
   return getEnvValue("DATA_GOV_IN_API_KEY");
 }
+
+export function getApifyToken(): string | undefined {
+  return getEnvValue("APIFY_TOKEN");
+}
+
+export function getIndiamartActorId(): string {
+  return (
+    getEnvValue("APIFY_INDIAMART_ACTOR_ID") ??
+    "makework36~indiamart-suppliers-scraper"
+  );
+}

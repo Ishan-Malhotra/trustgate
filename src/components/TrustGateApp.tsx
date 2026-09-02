@@ -40,6 +40,9 @@ export function TrustGateApp() {
   const [chosenSellerId, setChosenSellerId] = useState<string>();
   const [devMode, setDevMode] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingLabel, setLoadingLabel] = useState(
+    "Comparing relevant sellers…"
+  );
   const [logLoading, setLogLoading] = useState(false);
   const [llmConfigured, setLlmConfigured] = useState(false);
   const [razorpayConfigured, setRazorpayConfigured] = useState(false);
@@ -116,7 +119,20 @@ export function TrustGateApp() {
     return res.json();
   }
 
+  function resolveLoadingLabel(message: string): string {
+    const lower = message.toLowerCase();
+    const isCatalogSearch =
+      lower.includes("star wars") ||
+      lower.includes("t-shirt") ||
+      lower.includes("tshirt");
+    if (isCatalogSearch) {
+      return "Searching catalog + verifying with TrustGate…";
+    }
+    return "Comparing relevant sellers…";
+  }
+
   async function handleMessage(message: string) {
+    setLoadingLabel(resolveLoadingLabel(message));
     setLoading(true);
     setMessages((prev) => [
       ...prev,
@@ -211,6 +227,7 @@ export function TrustGateApp() {
           <ChatPanel
             messages={messages}
             loading={loading}
+            loadingLabel={loadingLabel}
             onSend={handleMessage}
             onQuickDemo={handleMessage}
           />

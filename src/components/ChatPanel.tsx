@@ -12,6 +12,7 @@ import {
 interface ChatPanelProps {
   messages: ChatMessage[];
   loading: boolean;
+  loadingLabel?: string;
   onSend: (message: string) => void;
   onQuickDemo: (message: string) => void;
 }
@@ -37,11 +38,16 @@ const QUICK_DEMOS = [
     label: "Pay Infosys ₹250",
     message: "Pay Infosys Limited ₹250 for software consulting",
   },
+  {
+    label: "Buy white Star Wars t-shirt",
+    message: "Buy a white Star Wars t-shirt",
+  },
 ];
 
 export function ChatPanel({
   messages,
   loading,
+  loadingLabel = "Comparing relevant sellers…",
   onSend,
   onQuickDemo,
 }: ChatPanelProps) {
@@ -201,7 +207,7 @@ export function ChatPanel({
         {loading && (
           <div className="flex justify-start">
             <div className="rounded-xl border border-zinc-800 bg-zinc-950/80 px-4 py-3 text-sm text-zinc-500">
-              Comparing relevant sellers…
+              {loadingLabel}
             </div>
           </div>
         )}

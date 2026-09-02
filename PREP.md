@@ -31,6 +31,7 @@ The decision is not cosmetic. It drives a real **Razorpay test-mode** call:
 | Deterministic trust math | `src/lib/trust/` |
 | User policy gate | `src/lib/policy/` |
 | Buyer agent + tools | `src/lib/agent/` |
+| Catalog providers (`search_catalog`) | `src/lib/catalog/` |
 | Razorpay test payments | `src/lib/razorpay/` |
 | MCA live company lookup | `src/lib/registry/` |
 | Seed sellers | `data/sellers.json` |
@@ -44,6 +45,7 @@ Needed env:
 - `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` — real test payments (without these, payments mock)
 - `ANTHROPIC_API_KEY` — buyer agent + explanations (`ANTHROPIC_WORKSPACE_ID` if your key is workspace-bound)
 - `DATA_GOV_IN_API_KEY` — optional; MCA lookup falls back to a public sample key (rate-limited)
+- `APIFY_TOKEN` / `APIFY_INDIAMART_ACTOR_ID` — optional; without token, external catalog search returns no suppliers (honest empty, not invented)
 
 ---
 
@@ -53,13 +55,19 @@ Needed env:
 User message
     → Buyer agent (Claude) picks tools
         → Seed seller?  checkTrust(sellerId, amount)
-        → Unknown company?  lookupUnknownMerchant(name, amount)
+        → Unknown company by name?  lookupUnknownMerchant(name, amount)
             → MCA registry → confidence
             → scoreSeller → evaluateTrust → applyUserPolicy
+        → Product outside seed catalog?  search_catalog({ query, budget? })
+            → Catalog provider (IndiaMART) search + normalize
+            → ask TrustGate (same lookup path) per candidate
+            → rank TrustGate-approved by price
         → authorizeOrCapture  OR  refuse
     → Human-readable explanation
     → Audit log + chat UI update
 ```
+
+**Boundary that matters:** Shopping / catalog finds the deal. TrustGate decides whether money can move. Catalog does not invent trust, inspect GST for approval, or calculate risk.
 
 Everything important happens on the server through API routes. The chat UI just posts a message and renders the result.
 
@@ -193,6 +201,7 @@ Claude (via Vercel AI SDK + Anthropic) with a system prompt that includes the pu
 |------|------|--------------|
 | `checkTrust` | Seed catalog sellers | `evaluateTrust` + `applyUserPolicy`, logs trust + policy |
 | `lookupUnknownMerchant` | Real company not in seed data | MCA lookup → synthetic seller → confidence → same gates + reasoning chain |
+| `search_catalog` | Product goal **not** covered by seed listings | Catalog provider search → normalize → ask TrustGate per candidate → rank approved by price |
 | `authorizeOrCapture` | After a check | Runs Razorpay capture or hold using the **stored** decision for that seller |
 | `refuse` | Agent chooses not to pay | Logs refusal; no Razorpay |
 
@@ -202,10 +211,37 @@ Rules baked into the prompt:
 - Don’t refuse just because a merchant is “new” — use confidence
 - Follow `recommendedAction` from the tools
 - High MCA confidence can approve capture even when raw risk looks medium due to missing history
+- Product outside seed catalog → `search_catalog` (do not force a fake seed match); honest `no_suppliers` / `no_viable` is correct
 
 Entry: `POST /api/purchase` with `{ message, userPolicy? }`.
 
 Deterministic bypass (seed only): `POST /api/evaluate` with `{ sellerId, amount, executePayment? }` — same gates, no agent.
+
+---
+
+## Catalog search (Shopping Agent / providers)
+
+Shopping Agent finds deals. Catalog providers search + normalize. **TrustGate alone** decides if a deal can be transacted.
+
+```
+search_catalog
+  → Catalog Provider (IndiaMART first; ONDC/Shopify later)
+  → normalize CatalogCandidate { merchantName, amount, source, … }
+  → ask TrustGate (runLookupUnknownMerchant) for each shortlisted candidate
+  → rank TrustGate-approved (lowest price); refuse-filtered out
+  → return structured result for the buyer agent to narrate / pay
+```
+
+Files:
+- `src/lib/catalog/types.ts` — provider-agnostic candidate + search result
+- `src/lib/catalog/providers/indiamart.ts` — Apify IndiaMART actor, session cache, never invents suppliers
+- `src/lib/catalog/searchCatalog.ts` — `search_catalog()` orchestration
+- `src/lib/agent/shoppingAgent.ts` — thin wrapper (no GST/risk logic)
+- `src/lib/agent/lookupUnknownMerchant.ts` — shared TrustGate live path used by tool + catalog
+
+GST on IndiaMART rows is optional metadata only — never used to approve a seller.
+
+**Demo button:** “Buy white Star Wars t-shirt” — external catalog path (needs `APIFY_TOKEN`; can take longer; loading label explains it).
 
 ---
 
@@ -217,7 +253,7 @@ Hits data.gov.in **Company Master Data**. Exact name / CIN filters, company-suff
 
 `sellerFromMca` builds a temporary seller (`live:<CIN>` or `live:unknown:...`) with empty dispute history. Age/KYC come from the registry row when present.
 
-Live lookups write audit entries tagged `[live-lookup]` (cyan highlight in the UI) plus a step-by-step reasoning chain (`buildReasoningChain.ts`).
+Live lookups write audit entries tagged `[live-lookup]` (cyan highlight in the UI) plus a step-by-step reasoning chain (`buildReasoningChain.ts`). Catalog verification also logs `[search_catalog]` per candidate.
 
 **Demo button:** “Pay Infosys ₹250” — company outside the seed catalog.
 
@@ -250,7 +286,7 @@ No keys → mock mode (still logs a payment event so the UI demo works).
 
 Types you’ll see: `agent`, `trust_check`, `policy_check`, `payment`, `refusal`, `reasoning`, `error`, `flagged`.
 
-UI: `AuditLogPanel` — live feed; reasoning / `[live-lookup]` highlighted.
+UI: `AuditLogPanel` — live feed; reasoning / `[live-lookup]` / `[search_catalog]` highlighted.
 
 API: `GET /api/audit-log`.
 
@@ -273,6 +309,7 @@ Quick demos (chat buttons):
 3. Phone case, best price — DealDash gaming seller is cheapest
 4. Coffee tasting ~₹450 — high trust + policy hold
 5. Pay Infosys ₹250 — live MCA path
+6. Buy white Star Wars t-shirt — external catalog → TrustGate verify → rank approved
 
 ---
 
@@ -295,8 +332,9 @@ Quick demos (chat buttons):
 3. **Policy overrides trust** — coffee ~₹450 held despite high trust (confirm threshold).
 4. **Gaming seller** — DealDash cheapest phone case; recent dispute spike shows up in score + log.
 5. **Live lookup** — Infosys (or another real MCA company); confidence vs risk visible; `[live-lookup]` in audit.
-6. **Editable policy** — change confirm threshold, re-run, outcome changes immediately.
-7. **End-to-end log** — trust reasoning and policy reasoning both readable for every decision.
+6. **External catalog** — Star Wars t-shirt chip; `[search_catalog]` candidates → TrustGate decisions → cheapest approved (or honest no_viable).
+7. **Editable policy** — change confirm threshold, re-run, outcome changes immediately.
+8. **End-to-end log** — trust reasoning and policy reasoning both readable for every decision.
 
 ---
 

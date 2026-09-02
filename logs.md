@@ -75,6 +75,17 @@
 - **Done:** MCA lookup hardening — verified session cache, CIN retry, non-poisoning on API errors, `searchCompanyDetailed()` with distinct failure reasons
 - **Tests:** Infosys ₹500 capture, verified+bad-signals refuse, MCA verified-cache fallback, dual-score audit
 
+## Phase 10 — Catalog provider + Shopping Agent (TrustGate stays the gate)
+- **Architecture:** Shopping Agent finds deals; Catalog Provider searches/normalizes; TrustGate alone decides if a deal can be transacted
+- **Flow:** `search → normalize → ask TrustGate → rank approved → return` (tool/API: `search_catalog`, not `shopForProduct`)
+- **Done:** `src/lib/catalog/` — types, IndiaMART provider (Apify), `search_catalog()` ranks TrustGate-approved by price
+- **Done:** Shared `runLookupUnknownMerchant` extracted; existing live-lookup tool unchanged in behavior
+- **Done:** Thin `shoppingAgent.ts` wrapper; agent tool `search_catalog`; prompt branch for product goals outside seed catalog
+- **Done:** Demo chip “Buy white Star Wars t-shirt”; loading label for catalog search; audit highlights `[search_catalog]`
+- **Env:** `APIFY_TOKEN`, `APIFY_INDIAMART_ACTOR_ID` (default `makework36~indiamart-suppliers-scraper`)
+- **Tests:** IndiaMART mapping/cache/failure; search_catalog no_viable / cheapest approved / default budget note
+- **Not done here:** Extra providers (ONDC/Shopify), shopping-side trust/GST approval, hardcoded fallback suppliers
+
 ## Prep doc
 - **Done:** `PREP.md` — full codebase explainer for demo prep (product idea, seed sellers, trust/confidence/policy, agent tools, MCA, Razorpay, UI, demo checklist)
 - **Done:** `.cursorrules` updated — after every step/phase, update `PREP.md` so it stays accurate

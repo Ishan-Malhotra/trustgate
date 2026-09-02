@@ -1,5 +1,6 @@
 import { generateText, stepCountIs } from "ai";
-import { createBuyerTools, type AgentContext } from "./tools";
+import { createBuyerTools } from "./tools";
+import type { AgentContext } from "./context";
 import { generateExplanation } from "@/lib/explanation/generateExplanation";
 import { getAllSellers, getSellerById } from "@/lib/sellers";
 import { logAudit, getAuditLog } from "@/lib/audit/logger";
@@ -25,7 +26,7 @@ function buildSystemPrompt(): string {
 
 Requests are GOAL-based (item + optional constraints). Do not treat a named seller as a skip-the-comparison shortcut.
 
-HOW TO BUY:
+HOW TO BUY (seed catalog):
 1. Filter the catalog to every seller whose category, known-for, or listings match the goal.
 2. Call checkTrust on EACH relevant seller (usually 2+). Use that seller's matching listing price as amount unless the user set a budget.
 3. Compare trust tier, listing price, spend limit, and user policy together. Do not pick on price alone.
@@ -51,7 +52,15 @@ LIVE MERCHANT LOOKUP (merchants NOT in the catalog above):
 - Never invent a seed seller id for an unknown merchant.
 - Never refuse solely because a merchant is "new to us" — use the confidence assessment from lookupUnknownMerchant.
 - Follow recommendedAction from lookupUnknownMerchant exactly (capture vs hold vs refuse). High MCA confidence can approve capture even when risk score is medium due to missing transaction history — that is expected, not a reason to hold.
-- Distinguish in your explanation: "insufficient verifiable history" (low confidence) vs "signals look bad" (high risk / adverse registry).`;
+- Distinguish in your explanation: "insufficient verifiable history" (low confidence) vs "signals look bad" (high risk / adverse registry).
+
+EXTERNAL CATALOG SEARCH (product goals NOT covered by the seed catalog above):
+- If the user wants a PRODUCT that no seed seller lists (e.g. clothing, electronics not in the catalog), call search_catalog({ query, budget? }).
+- search_catalog finds real catalog candidates (IndiaMART first), asks TrustGate to verify each merchant, and ranks TrustGate-approved deals by price. You do NOT invent trust or inspect GST yourself.
+- Never force a seed-catalog mismatch when search_catalog is the right path.
+- If status is no_suppliers or no_viable, explain honestly and do NOT invent sellers or fall back to unrelated seed merchants.
+- If status is ok and chosen recommendedAction is capture or hold, call authorizeOrCapture with that sellerId, amount, and action. Payment is a separate TrustGate step after an approved deal exists.
+- Walk through suppliers found → each TrustGate decision → final pick with price + TrustGate reasoning in your reply.`;
 }
 
 export interface PurchaseRequestResult {
@@ -96,7 +105,7 @@ export async function runBuyerAgent(
       system: buildSystemPrompt(),
       prompt: userMessage,
       tools,
-      stopWhen: stepCountIs(16),
+      stopWhen: stepCountIs(20),
     });
 
     responseText = text;
