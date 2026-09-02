@@ -3,6 +3,7 @@ import {
   buildDeterministicExplanation,
   buildExplanationSellerFacts,
   classifyPrimaryReason,
+  resolveExplanationSellers,
   validateExplanationText,
 } from "@/lib/explanation/explanationFacts"
 import type { SellerTrustCheck } from "@/lib/types"
@@ -83,6 +84,45 @@ describe("classifyPrimaryReason", () => {
   })
 })
 
+describe("resolveExplanationSellers", () => {
+  it("appends a synthesized chosen seller when they are missing from comparison", () => {
+    const { chosenSeller, sellers } = resolveExplanationSellers(
+      "Anax Impex",
+      [mahavir, saijee],
+      anax
+    )
+
+    expect(chosenSeller.name).toBe("Anax Impex")
+    expect(sellers.map((s) => s.name)).toEqual([
+      "MAHAVIR INDUSTRIES LIMITED",
+      "Saijee Impex",
+      "Anax Impex",
+    ])
+
+    const text = buildDeterministicExplanation("Anax Impex", sellers)
+    expect(text).toMatch(/Anax Impex was held:/)
+    expect(text).not.toMatch(/^Saijee Impex was held:/)
+  })
+
+  it("uses the synthesized chosen seller when comparison is empty", () => {
+    const { sellers } = resolveExplanationSellers("Anax Impex", [], anax)
+    const text = buildDeterministicExplanation("Anax Impex", sellers)
+
+    expect(sellers).toHaveLength(1)
+    expect(text).toMatch(/Anax Impex was held:.*Insufficient verifiable history/i)
+    expect(text).not.toBe("Decision processed.")
+  })
+
+  it("does not duplicate the chosen seller when they are already in comparison", () => {
+    const { sellers } = resolveExplanationSellers(
+      "Anax Impex",
+      [mahavir, anax, saijee],
+      anax
+    )
+    expect(sellers.filter((s) => s.name === "Anax Impex")).toHaveLength(1)
+  })
+})
+
 describe("buildDeterministicExplanation", () => {
   it("cites each seller's own reason without cross-contamination", () => {
     const sellers = [mahavir, anax, saijee].map(buildExplanationSellerFacts)
@@ -92,6 +132,14 @@ describe("buildDeterministicExplanation", () => {
     expect(text).not.toMatch(/MAHAVIR.*15/i)
     expect(text).not.toMatch(/refused.*scoring 15/i)
     expect(text).toMatch(/Anax Impex was held:.*Insufficient verifiable history/i)
+  })
+
+  it("does not attribute another merchant when the chosen name is absent", () => {
+    const sellers = [mahavir, saijee].map(buildExplanationSellerFacts)
+    const text = buildDeterministicExplanation("Anax Impex", sellers)
+
+    expect(text).toBe("Decision processed.")
+    expect(text).not.toMatch(/Saijee Impex/)
   })
 })
 

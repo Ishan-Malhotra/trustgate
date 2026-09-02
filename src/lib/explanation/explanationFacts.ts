@@ -135,12 +135,30 @@ export function formatSellerExplanationSentence(
   return `${seller.name} was ${verb}: ${seller.primaryReasonDetail}`
 }
 
+export function resolveExplanationSellers(
+  sellerName: string,
+  comparison: SellerTrustCheck[],
+  fallbackCheck: SellerTrustCheck
+): {
+  chosenSeller: ExplanationSellerFacts
+  sellers: ExplanationSellerFacts[]
+} {
+  const sellers = comparison.map(buildExplanationSellerFacts)
+  const existing = sellers.find((s) => s.name === sellerName)
+  if (existing) {
+    return { chosenSeller: existing, sellers }
+  }
+
+  const chosenSeller = buildExplanationSellerFacts(fallbackCheck)
+  sellers.push(chosenSeller)
+  return { chosenSeller, sellers }
+}
+
 export function buildDeterministicExplanation(
   chosenName: string,
   sellers: ExplanationSellerFacts[]
 ): string {
-  const chosen =
-    sellers.find((s) => s.name === chosenName) ?? sellers[sellers.length - 1]
+  const chosen = sellers.find((s) => s.name === chosenName)
   if (!chosen) return "Decision processed."
 
   const chosenSentence = formatSellerExplanationSentence(chosen)

@@ -45,7 +45,7 @@ Needed env:
 - `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` — real test payments (without these, payments mock)
 - `ANTHROPIC_API_KEY` — buyer agent + explanations (`ANTHROPIC_WORKSPACE_ID` if your key is workspace-bound)
 - `DATA_GOV_IN_API_KEY` — optional; MCA lookup falls back to a public sample key (rate-limited)
-- `APIFY_TOKEN` / `APIFY_INDIAMART_ACTOR_ID` — optional; without token, external catalog search returns no suppliers (honest empty, not invented)
+- `APIFY_TOKEN` / `APIFY_INDIAMART_ACTOR_ID` — optional; without token, external catalog search returns no suppliers (honest empty, not invented). Actor ID defaults to `sourabhbgp~indiamart-scraper` (`makework36~indiamart-suppliers-scraper` still works if set)
 
 ---
 
@@ -234,7 +234,7 @@ search_catalog
 
 Files:
 - `src/lib/catalog/types.ts` — provider-agnostic candidate + search result
-- `src/lib/catalog/providers/indiamart.ts` — Apify IndiaMART actor, session cache, never invents suppliers
+- `src/lib/catalog/providers/indiamart.ts` — Apify IndiaMART actor (default `sourabhbgp~indiamart-scraper`), session cache, never invents suppliers
 - `src/lib/catalog/searchCatalog.ts` — `search_catalog()` orchestration
 - `src/lib/agent/shoppingAgent.ts` — thin wrapper (no GST/risk logic)
 - `src/lib/agent/lookupUnknownMerchant.ts` — shared TrustGate live path used by tool + catalog

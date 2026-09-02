@@ -30,8 +30,11 @@ export function formatProgressEntry(entry: AuditEntry): string {
   if (msg.includes("[live-lookup]") && entry.type === "trust_check") {
     return msg.replace("[live-lookup]", "TrustGate:").trim()
   }
-  if (entry.type === "policy_check") {
+  if (msg.includes("[live-lookup]") && entry.type === "policy_check") {
     return msg.replace("[live-lookup]", "Policy:").trim()
+  }
+  if (entry.type === "policy_check") {
+    return `Policy: ${msg}`.trim()
   }
   if (entry.type === "reasoning" && msg.startsWith("Agent conclusion")) {
     return "Agent reached a conclusion"

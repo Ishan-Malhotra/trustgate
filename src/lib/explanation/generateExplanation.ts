@@ -5,9 +5,8 @@ import { getAnthropicProvider } from "@/lib/config/anthropic"
 import {
   EXPLANATION_SYSTEM_PROMPT,
   buildDeterministicExplanation,
-  buildExplanationSellerFacts,
+  resolveExplanationSellers,
   validateExplanationText,
-  type ExplanationSellerFacts,
 } from "@/lib/explanation/explanationFacts"
 
 export async function generateExplanation(
@@ -16,13 +15,10 @@ export async function generateExplanation(
   amount: number,
   comparison: SellerTrustCheck[] = []
 ): Promise<string> {
-  const sellers: ExplanationSellerFacts[] = comparison.map(
-    buildExplanationSellerFacts
-  )
-
-  const chosenSeller =
-    sellers.find((s) => s.name === sellerName) ??
-    buildExplanationSellerFacts({
+  const { chosenSeller, sellers } = resolveExplanationSellers(
+    sellerName,
+    comparison,
+    {
       sellerId: "chosen",
       sellerName,
       amount,
@@ -39,7 +35,8 @@ export async function generateExplanation(
       confidenceLevel: decision.confidenceLevel,
       confidenceBand: decision.confidenceBand,
       confidenceReasons: decision.confidenceReasons,
-    })
+    }
+  )
 
   const payload = {
     chosenSeller,

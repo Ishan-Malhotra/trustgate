@@ -82,7 +82,7 @@
 - **Done:** Shared `runLookupUnknownMerchant` extracted; existing live-lookup tool unchanged in behavior
 - **Done:** Thin `shoppingAgent.ts` wrapper; agent tool `search_catalog`; prompt branch for product goals outside seed catalog
 - **Done:** Demo chip “Buy white Star Wars t-shirt”; loading label for catalog search; audit highlights `[search_catalog]`
-- **Env:** `APIFY_TOKEN`, `APIFY_INDIAMART_ACTOR_ID` (default `makework36~indiamart-suppliers-scraper`)
+- **Env:** `APIFY_TOKEN`, `APIFY_INDIAMART_ACTOR_ID` (default `sourabhbgp~indiamart-scraper`; `makework36~indiamart-suppliers-scraper` still supported)
 - **Tests:** IndiaMART mapping/cache/failure; search_catalog no_viable / cheapest approved / default budget note
 - **Not done here:** Extra providers (ONDC/Shopify), shopping-side trust/GST approval, hardcoded fallback suppliers
 
