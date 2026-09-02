@@ -66,6 +66,6 @@ export function getApifyToken(): string | undefined {
 export function getIndiamartActorId(): string {
   return (
     getEnvValue("APIFY_INDIAMART_ACTOR_ID") ??
-    "makework36~indiamart-suppliers-scraper"
+    "sourabhbgp~indiamart-scraper"
   );
 }
