@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatPanel } from "@/components/ChatPanel";
 import { SellerPanel } from "@/components/SellerPanel";
 import { PolicyPanel } from "@/components/PolicyPanel";
@@ -13,6 +13,7 @@ import type {
   SellersResponse,
 } from "@/lib/ui/types";
 import { USER_POLICY } from "@/lib/config/userPolicy";
+import { filterProgressEntries } from "@/lib/ui/progressLog";
 
 function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -43,6 +44,8 @@ export function TrustGateApp() {
   const [loadingLabel, setLoadingLabel] = useState(
     "Comparing relevant sellers…"
   );
+  const [progressEntries, setProgressEntries] = useState<AuditEntry[]>([]);
+  const progressBaselineRef = useRef(0);
   const [logLoading, setLogLoading] = useState(false);
   const [llmConfigured, setLlmConfigured] = useState(false);
   const [razorpayConfigured, setRazorpayConfigured] = useState(false);
@@ -65,17 +68,38 @@ export function TrustGateApp() {
     []
   );
 
-  const fetchAuditLog = useCallback(async () => {
-    setLogLoading(true);
+  const fetchAuditLog = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setLogLoading(true);
     try {
       const res = await fetch("/api/audit-log");
       if (!res.ok) return;
       const data = await res.json();
-      setAuditLog(data.entries ?? []);
+      const entries = (data.entries ?? []) as AuditEntry[];
+      setAuditLog(entries);
+      return entries;
     } finally {
-      setLogLoading(false);
+      if (!options?.silent) setLogLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!loading) return;
+
+    const poll = async () => {
+      const entries = await fetchAuditLog({ silent: true });
+      if (!entries) return;
+      const baseline = progressBaselineRef.current;
+      const slice = entries.slice(baseline);
+      setProgressEntries(filterProgressEntries(slice));
+    };
+
+    void poll();
+    const id = window.setInterval(() => {
+      void poll();
+    }, 800);
+
+    return () => window.clearInterval(id);
+  }, [loading, fetchAuditLog]);
 
   useEffect(() => {
     fetchSellers(false, { syncPolicy: true }).catch((err) =>
@@ -133,6 +157,8 @@ export function TrustGateApp() {
 
   async function handleMessage(message: string) {
     setLoadingLabel(resolveLoadingLabel(message));
+    progressBaselineRef.current = auditLog.length;
+    setProgressEntries([]);
     setLoading(true);
     setMessages((prev) => [
       ...prev,
@@ -184,6 +210,7 @@ export function TrustGateApp() {
       ]);
     } finally {
       setLoading(false);
+      setProgressEntries([]);
       fetchAuditLog();
     }
   }
@@ -228,6 +255,7 @@ export function TrustGateApp() {
             messages={messages}
             loading={loading}
             loadingLabel={loadingLabel}
+            progressEntries={progressEntries}
             onSend={handleMessage}
             onQuickDemo={handleMessage}
           />

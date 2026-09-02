@@ -1,18 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import type { AuditEntry } from "@/lib/types";
 import type { ChatMessage } from "@/lib/ui/types";
-import {
-  actionColor,
-  actionLabel,
-  formatInr,
-  tierColor,
-} from "@/lib/ui/types";
+import { actionColor, actionLabel, formatInr } from "@/lib/ui/types";
+import { SellerEvaluationSummary } from "@/components/SellerEvaluationSummary";
+import { EvaluationProgress } from "@/components/EvaluationProgress";
 
 interface ChatPanelProps {
   messages: ChatMessage[];
   loading: boolean;
   loadingLabel?: string;
+  progressEntries?: AuditEntry[];
   onSend: (message: string) => void;
   onQuickDemo: (message: string) => void;
 }
@@ -48,6 +47,7 @@ export function ChatPanel({
   messages,
   loading,
   loadingLabel = "Comparing relevant sellers…",
+  progressEntries = [],
   onSend,
   onQuickDemo,
 }: ChatPanelProps) {
@@ -101,52 +101,13 @@ export function ChatPanel({
                   <p className="font-semibold uppercase tracking-wider text-zinc-500">
                     Agent comparison
                   </p>
-                  {msg.evaluatedSellers.map((check) => {
-                    const chosen = check.sellerId === msg.chosenSellerId;
-                    return (
-                      <div
-                        key={check.sellerId}
-                        className={`rounded-md border px-2 py-2 ${
-                          chosen
-                            ? "border-blue-500/40 bg-blue-500/10"
-                            : "border-zinc-800 bg-zinc-950/60"
-                        }`}
-                      >
-                        <div className="flex flex-wrap items-baseline justify-between gap-2">
-                          <span className="font-medium text-zinc-200">
-                            {check.sellerName}
-                            {chosen ? " · chosen" : ""}
-                          </span>
-                          <span className="text-zinc-400">
-                            {formatInr(check.amount)}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-zinc-400">
-                          Trust{" "}
-                          {check.riskScore !== undefined &&
-                          check.riskScore !== check.score ? (
-                            <>
-                              <span className="text-zinc-500">
-                                Raw {check.riskScore} ({check.riskTier})
-                              </span>
-                              {" → "}
-                              <strong className={tierColor(check.tier)}>
-                                {check.score} ({check.tier})
-                              </strong>
-                            </>
-                          ) : (
-                            <strong className={tierColor(check.tier)}>
-                              {check.score} ({check.tier})
-                            </strong>
-                          )}
-                          {" · "}
-                          <span className={actionColor(check.recommendedAction)}>
-                            {actionLabel(check.recommendedAction)}
-                          </span>
-                        </p>
-                      </div>
-                    );
-                  })}
+                  {msg.evaluatedSellers.map((check) => (
+                    <SellerEvaluationSummary
+                      key={check.sellerId}
+                      check={check}
+                      chosen={check.sellerId === msg.chosenSellerId}
+                    />
+                  ))}
                   {msg.decision && (
                     <div className="flex flex-wrap gap-3 pt-1 text-zinc-400">
                       <span>
@@ -205,11 +166,11 @@ export function ChatPanel({
         ))}
 
         {loading && (
-          <div className="flex justify-start">
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950/80 px-4 py-3 text-sm text-zinc-500">
-              {loadingLabel}
-            </div>
-          </div>
+          <EvaluationProgress
+            entries={progressEntries}
+            active={loading}
+            title={loadingLabel}
+          />
         )}
       </div>
 

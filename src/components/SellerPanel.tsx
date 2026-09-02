@@ -8,6 +8,7 @@ import {
   tierColor,
 } from "@/lib/ui/types";
 import type { SellerTrustCheck } from "@/lib/types";
+import { buildTrustDisplayLines } from "@/lib/ui/trustDisplay";
 
 interface SellerPanelProps {
   sellers: CatalogSeller[];
@@ -95,20 +96,48 @@ export function SellerPanel({
                   </div>
                   {showScore && (
                     <div className="shrink-0 text-right">
-                      <p className={`font-mono text-lg font-semibold ${tierColor(showScore.tier)}`}>
-                        {showScore.score}
-                      </p>
-                      <span
-                        className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${tierBg(showScore.tier)} ${tierColor(showScore.tier)}`}
-                      >
-                        {showScore.tier}
-                      </span>
+                      {revealed?.liveLookup && revealed.confidenceBand ? (
+                        <>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                            Confidence
+                          </p>
+                          <p className="font-mono text-sm font-semibold text-sky-400">
+                            {revealed.confidenceBand}
+                            {revealed.confidenceLevel !== undefined
+                              ? ` (${revealed.confidenceLevel}%)`
+                              : ""}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className={`font-mono text-lg font-semibold ${tierColor(showScore.tier)}`}>
+                            {showScore.score}
+                          </p>
+                          <span
+                            className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${tierBg(showScore.tier)} ${tierColor(showScore.tier)}`}
+                          >
+                            {showScore.tier}
+                          </span>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
                 <p className="mt-2 text-xs text-zinc-400">
                   {formatListings(seller.listings)}
                 </p>
+                {showScore && revealed && (
+                  <div className="mt-2 space-y-0.5 border-t border-zinc-800/80 pt-2">
+                    {buildTrustDisplayLines(revealed).map((line) => (
+                      <p key={line.label} className="text-[10px] text-zinc-500">
+                        <span>{line.label}: </span>
+                        <span className={line.className ?? "text-zinc-400"}>
+                          {line.value}
+                        </span>
+                      </p>
+                    ))}
+                  </div>
+                )}
                 {showScore && (
                   <p className="mt-1 text-xs text-zinc-500">
                     Limit:{" "}
