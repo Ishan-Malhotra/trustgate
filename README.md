@@ -100,3 +100,4 @@ curl -X POST http://localhost:3000/api/evaluate \
 
 - GitHub: https://github.com/Ishan-Malhotra/trustgate
 - Phase log: [logs.md](./logs.md)
+- Demo prep / codebase notes: [PREP.md](./PREP.md)

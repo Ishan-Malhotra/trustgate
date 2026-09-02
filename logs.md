@@ -75,6 +75,11 @@
 - **Done:** MCA lookup hardening — verified session cache, CIN retry, non-poisoning on API errors, `searchCompanyDetailed()` with distinct failure reasons
 - **Tests:** Infosys ₹500 capture, verified+bad-signals refuse, MCA verified-cache fallback, dual-score audit
 
+## Prep doc
+- **Done:** `PREP.md` — full codebase explainer for demo prep (product idea, seed sellers, trust/confidence/policy, agent tools, MCA, Razorpay, UI, demo checklist)
+- **Done:** `.cursorrules` updated — after every step/phase, update `PREP.md` so it stays accurate
+
 ## Repository
 - GitHub: https://github.com/Ishan-Malhotra/trustgate
 - README: [README.md](./README.md)
+- Prep notes: [PREP.md](./PREP.md)

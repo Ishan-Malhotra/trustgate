@@ -110,3 +110,7 @@ touching the frontend. Flag me before adding anything not listed above.
 
 - Always push to github after completing each step.
 - Maintain and edit a logs.md files for after completing each phase log it there.
+- After every completed step/phase, update PREP.md (the demo prep / codebase explainer)
+  so it stays accurate: what changed, how the flow works now, which files matter,
+  and what to show in a demo. Write in simple natural language — notes, not a textbook.
+  Never leave PREP.md stale relative to the code you just shipped.
