@@ -239,9 +239,32 @@ Files:
 - `src/lib/agent/shoppingAgent.ts` — thin wrapper (no GST/risk logic)
 - `src/lib/agent/lookupUnknownMerchant.ts` — shared TrustGate live path used by tool + catalog
 
-GST on IndiaMART rows is optional metadata only — never used to approve a seller.
+GST on IndiaMART search rows is usually empty with the current actor — never used to approve a seller. **GST verification and fuzzy MCA name matching are still next steps**, not shipped.
 
 **Demo button:** “Buy white Star Wars t-shirt” — external catalog path (needs `APIFY_TOKEN`; can take longer; loading label explains it).
+
+### Pre-demo: IndiaMART trade name → MCA match (re-tested)
+
+Matching today is **exact CompanyName + suffix retries** only (`LIMITED` / `PRIVATE LIMITED` / `PVT LTD` / `LTD` / `LLP`). No fuzzy / GST bridge.
+
+Live re-test (2026-09-03) with `sourabhbgp~indiamart-scraper` + MCA API:
+
+| Source | Trade / query name | MCA hit? | How | Expected TrustGate path |
+|--------|-------------------|----------|-----|-------------------------|
+| Control | Infosys Limited | Yes | Exact | High confidence → capture (if within policy) |
+| Star Wars chip | Berryblues Export (OPC) Private Limited | Yes | Exact | Active registry → stronger confidence than trade names |
+| Star Wars chip | ORN Clothing Private Limited | Yes | Exact | Active registry |
+| Star Wars chip | S Creation | No | — | Low confidence (~15%) → trial hold |
+| Star Wars chip | 4S Print Solutions | No | — | Low confidence → trial hold |
+| Star Wars chip | A.S.International | No | — | Low confidence → trial hold |
+| Water-bottle run | MAHAVIR INDUSTRIES LIMITED | Yes | Exact | **Under CIRP** → refuse (adverse) |
+| Water-bottle run | Anax Impex / Saijee Impex | No | — | Low confidence → trial hold |
+| Category fallback | Gopesh Uniforms | Yes | Suffix → `… PRIVATE LIMITED` | Active registry |
+
+**Day-of risks (not nice-to-haves):**
+1. **`DATA_GOV_IN_API_KEY` is unset** in `.env.local` right now — the public sample key **429 rate-limits** under demo load. Without your own key, Infosys and catalog MCA checks can silently degrade to “no match / low confidence.” Put a real data.gov.in key in before stage.
+2. Star Wars chip often returns **~2/5 legal-form names that exact-match** and **~3/5 trade names that miss**. Demo narrative should expect a **mix of registry-verified + low-confidence holds**, not all captures.
+3. Until fuzzy matching / GST enrichment ships, **do not assume** a trade name like “Anax Impex” will ever clear MCA — honest low-confidence hold is the correct outcome.
 
 ---
 
@@ -249,13 +272,13 @@ GST on IndiaMART rows is optional metadata only — never used to approve a sell
 
 Files: `src/lib/registry/mcaLookup.ts`, `sellerFromMca.ts`
 
-Hits data.gov.in **Company Master Data**. Exact name / CIN filters, company-suffix retries, session caches (verified + name→CIN). API errors do not poison the “no match” cache.
+Hits data.gov.in **Company Master Data**. Exact name / CIN filters, company-suffix retries, session caches (verified + name→CIN). API errors do not poison the “no match” cache. **Fuzzy matching: not implemented (next step).**
 
 `sellerFromMca` builds a temporary seller (`live:<CIN>` or `live:unknown:...`) with empty dispute history. Age/KYC come from the registry row when present.
 
 Live lookups write audit entries tagged `[live-lookup]` (cyan highlight in the UI) plus a step-by-step reasoning chain (`buildReasoningChain.ts`). Catalog verification also logs `[search_catalog]` per candidate.
 
-**Demo button:** “Pay Infosys ₹250” — company outside the seed catalog.
+**Demo button:** “Pay Infosys ₹250” — company outside the seed catalog. Requires MCA API not rate-limited.
 
 ---
 

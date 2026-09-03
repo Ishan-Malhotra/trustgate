@@ -85,6 +85,7 @@
 - **Env:** `APIFY_TOKEN`, `APIFY_INDIAMART_ACTOR_ID` (default `sourabhbgp~indiamart-scraper`; `makework36~indiamart-suppliers-scraper` still supported)
 - **Tests:** IndiaMART mapping/cache/failure; search_catalog no_viable / cheapest approved / default budget note
 - **Not done here:** Extra providers (ONDC/Shopify), shopping-side trust/GST approval, hardcoded fallback suppliers
+- **Still next step (day-of risk):** GST verification; fuzzy MCA name matching. Re-tested 2026-09-03: Star Wars chip ≈2/5 exact MCA hits (Berryblues, ORN); trade names (S Creation, Anax Impex, etc.) miss → low-confidence hold. Suffix retry works (Gopesh Uniforms → PRIVATE LIMITED). **Set `DATA_GOV_IN_API_KEY`** — public sample key 429s under load.
 
 ## Prep doc
 - **Done:** `PREP.md` — full codebase explainer for demo prep (product idea, seed sellers, trust/confidence/policy, agent tools, MCA, Razorpay, UI, demo checklist)
