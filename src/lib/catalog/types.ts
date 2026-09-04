@@ -7,7 +7,9 @@ export interface CatalogCandidate {
   source: CatalogSource
   sourceUrl: string | null
   city: string | null
-  /** Optional passthrough (e.g. gst) — never used for trust decisions. */
+  /** GSTIN when present on listing — TrustGate may verify; shopping does not decide trust. */
+  gstin: string | null
+  /** Optional passthrough extras — not used for trust decisions by shopping agent. */
   raw?: Record<string, unknown>
 }
 

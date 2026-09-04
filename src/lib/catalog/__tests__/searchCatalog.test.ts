@@ -45,6 +45,7 @@ function candidate(
     source: "indiamart",
     sourceUrl: null,
     city: null,
+    gstin: null,
   }
 }
 

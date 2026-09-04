@@ -107,8 +107,12 @@ export function mapIndiamartItem(item: IndiamartRawItem): CatalogCandidate | nul
     typeof sourceUrlCandidate === "string" ? sourceUrlCandidate.trim() : null
 
   const raw: Record<string, unknown> = {}
-  if (typeof item.gstNumber === "string" && item.gstNumber.trim()) {
-    raw.gstNumber = item.gstNumber.trim()
+  const gstin =
+    typeof item.gstNumber === "string" && item.gstNumber.trim()
+      ? item.gstNumber.trim().toUpperCase()
+      : null
+  if (gstin) {
+    raw.gstNumber = gstin
   }
   if (typeof item.productName === "string" && item.productName.trim()) {
     raw.productName = item.productName.trim()
@@ -121,6 +125,7 @@ export function mapIndiamartItem(item: IndiamartRawItem): CatalogCandidate | nul
     source: "indiamart",
     sourceUrl,
     city,
+    gstin,
     ...(Object.keys(raw).length > 0 ? { raw } : {}),
   }
 }

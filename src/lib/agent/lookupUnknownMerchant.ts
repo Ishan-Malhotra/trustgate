@@ -1,12 +1,18 @@
 import { applyUserPolicy } from "@/lib/policy/applyUserPolicy"
 import { evaluateTrust } from "@/lib/trust/evaluateTrust"
 import { computeConfidence } from "@/lib/trust/confidence"
+import { applyGstConfidenceOverlay } from "@/lib/gst/applyGstConfidence"
+import { verifyGstin, type GstTaxpayerRecord } from "@/lib/gst/verifyGstin"
 import {
   buildLiveLookupReasoningChain,
   formatReasoningChain,
   formatScoreSummary,
 } from "@/lib/trust/buildReasoningChain"
-import { searchCompanyDetailed } from "@/lib/registry/mcaLookup"
+import {
+  searchCompanyDetailed,
+  type McaLookupResult,
+  type MCARecord,
+} from "@/lib/registry/mcaLookup"
 import { sellerFromMca } from "@/lib/registry/sellerFromMca"
 import { logAudit } from "@/lib/audit/logger"
 import type { FinalDecision, UserPolicy } from "@/lib/types"
@@ -40,23 +46,73 @@ export interface LookupUnknownMerchantResult {
     paidupCapital: number
     state: string
   } | null
+  gst?: {
+    gstin: string
+    legalName: string | null
+    status: string | null
+    source: string
+  } | null
   liveLookup: true
+}
+
+async function resolveMcaWithOptionalGst(
+  name: string,
+  gstin?: string
+): Promise<{
+  lookupResult: McaLookupResult
+  mcaRecord: MCARecord | null
+  gst: GstTaxpayerRecord | null
+  mcaQueryName: string
+}> {
+  let lookupResult = await searchCompanyDetailed(name)
+  let mcaRecord = lookupResult.record
+  let gst: GstTaxpayerRecord | null = null
+  let mcaQueryName = name
+
+  if (!mcaRecord && gstin) {
+    gst = await verifyGstin(gstin)
+    if (gst?.legalName) {
+      logAudit(
+        "agent",
+        `[gst] MCA miss for "${name}" — retrying MCA with GST legal name "${gst.legalName}"`,
+        { tradeName: name, legalName: gst.legalName, gstin: gst.gstin }
+      )
+      const retry = await searchCompanyDetailed(gst.legalName)
+      if (retry.record) {
+        lookupResult = retry
+        mcaRecord = retry.record
+        mcaQueryName = gst.legalName
+      }
+    }
+  } else if (gstin) {
+    // MCA already hit — still verify GST for confidence overlay / adverse GST
+    gst = await verifyGstin(gstin)
+  }
+
+  return { lookupResult, mcaRecord, gst, mcaQueryName }
 }
 
 /**
  * Existing live-merchant TrustGate path — shared by the agent tool and search_catalog.
- * Behavior unchanged: MCA → confidence → evaluateTrust → applyUserPolicy.
+ * MCA → optional GST bridge on miss → confidence (+ GST overlay) → evaluateTrust → policy.
  */
 export async function runLookupUnknownMerchant(
   ctx: AgentContext,
   userPolicy: UserPolicy,
-  input: { name: string; amount: number }
+  input: { name: string; amount: number; gstin?: string }
 ): Promise<LookupUnknownMerchantResult> {
-  const { name, amount } = input
-  const lookupResult = await searchCompanyDetailed(name)
-  const mcaRecord = lookupResult.record
-  const confidence = computeConfidence(mcaRecord)
-  const seller = sellerFromMca(name, mcaRecord)
+  const { name, amount, gstin } = input
+  const { lookupResult, mcaRecord, gst, mcaQueryName } =
+    await resolveMcaWithOptionalGst(name, gstin)
+
+  let confidence = computeConfidence(mcaRecord)
+  confidence = applyGstConfidenceOverlay(confidence, gst)
+
+  const seller = sellerFromMca(mcaQueryName, mcaRecord)
+  // Keep the trade/display name the caller used when we resolved via GST legal name
+  if (mcaQueryName !== name) {
+    seller.name = name
+  }
 
   ctx.liveMerchants[seller.id] = seller
 
@@ -79,6 +135,14 @@ export async function runLookupUnknownMerchant(
   logAudit("reasoning", `[live-lookup] Decision chain for ${seller.name}`, {
     sellerId: seller.id,
     steps: reasoningChain,
+    gst: gst
+      ? {
+          gstin: gst.gstin,
+          source: gst.source,
+          legalName: gst.legalName,
+          status: gst.statusNormalized,
+        }
+      : null,
   })
 
   logAudit(
@@ -109,6 +173,8 @@ export async function runLookupUnknownMerchant(
       mcaFound: Boolean(mcaRecord),
       lookupSource: lookupResult.source,
       lookupFailureReason: lookupResult.failureReason,
+      gstin: gst?.gstin,
+      gstSource: gst?.source,
       breakdown: finalDecision.breakdown,
     }
   )
@@ -149,6 +215,14 @@ export async function runLookupUnknownMerchant(
           registrationDate: mcaRecord.registrationDate,
           paidupCapital: mcaRecord.paidupCapital,
           state: mcaRecord.state,
+        }
+      : null,
+    gst: gst
+      ? {
+          gstin: gst.gstin,
+          legalName: gst.legalName,
+          status: gst.statusNormalized,
+          source: gst.source,
         }
       : null,
     liveLookup: true,

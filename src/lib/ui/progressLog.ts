@@ -9,6 +9,7 @@ export function isEvaluationProgressEntry(entry: AuditEntry): boolean {
     if (entry.message.startsWith("User request:")) return true
     if (entry.message.includes("[search_catalog]")) return true
     if (entry.message.includes("[live-lookup]")) return true
+    if (entry.message.includes("[gst]")) return true
     if (entry.message.startsWith("Tool call:")) return true
     if (entry.message.startsWith("Tool result:")) return false
     return entry.message.length < 280
@@ -23,6 +24,9 @@ export function formatProgressEntry(entry: AuditEntry): string {
   }
   if (msg.startsWith("Tool call:")) {
     return msg.replace("Tool call:", "Calling")
+  }
+  if (msg.includes("[gst]")) {
+    return msg.replace("[gst]", "GST:").trim()
   }
   if (msg.includes("[search_catalog]")) {
     return msg.replace("[search_catalog]", "Catalog:").trim()

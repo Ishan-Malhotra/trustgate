@@ -85,7 +85,17 @@
 - **Env:** `APIFY_TOKEN`, `APIFY_INDIAMART_ACTOR_ID` (default `sourabhbgp~indiamart-scraper`; `makework36~indiamart-suppliers-scraper` still supported)
 - **Tests:** IndiaMART mapping/cache/failure; search_catalog no_viable / cheapest approved / default budget note
 - **Not done here:** Extra providers (ONDC/Shopify), shopping-side trust/GST approval, hardcoded fallback suppliers
-- **Still next step (day-of risk):** GST verification; fuzzy MCA name matching. Re-tested 2026-09-03: Star Wars chip ≈2/5 exact MCA hits (Berryblues, ORN); trade names (S Creation, Anax Impex, etc.) miss → low-confidence hold. Suffix retry works (Gopesh Uniforms → PRIVATE LIMITED). **Set `DATA_GOV_IN_API_KEY`** — public sample key 429s under load.
+- **Still next step (day-of risk):** Fuzzy MCA name matching. GST verification **shipped** (format/checksum + optional legal-name MCA retry). Re-tested 2026-09-03: Star Wars chip ≈2/5 exact MCA hits (Berryblues, ORN); trade names miss without GSTIN. **Set `DATA_GOV_IN_API_KEY`**. Optional `GST_VERIFY_URL` when portal is blocked.
+
+## Phase 11 — GST verification (identity bridge)
+- **Done:** `src/lib/gst/validateGstin.ts` — format + mod-36 checksum (no network)
+- **Done:** `src/lib/gst/verifyGstin.ts` — portal/proxy lookup, session cache, soft fail → format-only when portal blocked
+- **Done:** `applyGstConfidenceOverlay` — GST Active / cancelled overlays MCA confidence (not shopping-side trust)
+- **Done:** Live lookup bridge — MCA miss + GSTIN → verify GST → retry MCA with legal name; catalog passes `candidate.gstin`
+- **Done:** Audit `[gst]` + progress log; tool `lookupUnknownMerchant` accepts optional `gstin`
+- **Env:** optional `GST_VERIFY_URL` (portal often blocked from servers)
+- **Tests:** validate/verify/overlay + MCA-miss→GST-legal-name→MCA-hit bridge
+- **Note:** IndiaMART search rows often lack GSTIN — bridge helps only when GSTIN is present
 
 ## Prep doc
 - **Done:** `PREP.md` — full codebase explainer for demo prep (product idea, seed sellers, trust/confidence/policy, agent tools, MCA, Razorpay, UI, demo checklist)

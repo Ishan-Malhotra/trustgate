@@ -57,6 +57,7 @@ export async function search_catalog(
     const decision = await runLookupUnknownMerchant(ctx, userPolicy, {
       name: candidate.merchantName,
       amount: amountUsed,
+      gstin: candidate.gstin ?? undefined,
     })
 
     const row: CatalogEvaluatedCandidate = {

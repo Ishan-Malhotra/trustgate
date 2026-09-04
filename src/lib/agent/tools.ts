@@ -90,13 +90,14 @@ export function createBuyerTools(
 
   const lookupUnknownMerchant = tool({
     description:
-      "Look up a merchant NOT in the seed catalog via India's MCA Company Master Data registry. Use when the user names a real company that is not a seller-00x id. Returns trust + confidence assessment. MUST be called before payment for unknown merchants.",
+      "Look up a merchant NOT in the seed catalog via India's MCA Company Master Data registry. Optionally pass gstin when known — TrustGate validates GST and may retry MCA with the GST legal name if the trade name misses. Returns trust + confidence assessment. MUST be called before payment for unknown merchants.",
     inputSchema: z.object({
       name: z.string().min(1),
       amount: z.number().positive(),
+      gstin: z.string().min(15).max(15).optional(),
     }),
-    execute: async ({ name, amount }) =>
-      runLookupUnknownMerchant(ctx, userPolicy, { name, amount }),
+    execute: async ({ name, amount, gstin }) =>
+      runLookupUnknownMerchant(ctx, userPolicy, { name, amount, gstin }),
   })
 
   const search_catalog = tool({

@@ -56,6 +56,7 @@ describe("mapIndiamartItem", () => {
       source: "indiamart",
       sourceUrl: "https://www.indiamart.com/avika/",
       city: "Surat",
+      gstin: "27AAACR1234E1Z5",
       raw: { gstNumber: "27AAACR1234E1Z5" },
     })
   })
@@ -76,6 +77,7 @@ describe("mapIndiamartItem", () => {
       source: "indiamart",
       sourceUrl: "https://www.indiamart.com/screation/",
       city: "Tiruppur",
+      gstin: null,
       raw: { productName: "White Star Wars T Shirt" },
     })
   })

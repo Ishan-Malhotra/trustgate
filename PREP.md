@@ -239,9 +239,16 @@ Files:
 - `src/lib/agent/shoppingAgent.ts` — thin wrapper (no GST/risk logic)
 - `src/lib/agent/lookupUnknownMerchant.ts` — shared TrustGate live path used by tool + catalog
 
-GST on IndiaMART search rows is usually empty with the current actor — never used to approve a seller. **GST verification and fuzzy MCA name matching are still next steps**, not shipped.
+GST on IndiaMART search rows is often empty. When a **GSTIN is present**, TrustGate now:
 
-**Demo button:** “Buy white Star Wars t-shirt” — external catalog path (needs `APIFY_TOKEN`; can take longer; loading label explains it).
+1. Validates format + checksum (`src/lib/gst/validateGstin.ts`)
+2. Tries taxpayer lookup (`verifyGstin` — portal or optional `GST_VERIFY_URL` proxy)
+3. On MCA trade-name miss + GST legal name → **retries MCA** with the legal name
+4. Overlays GST Active / Cancelled onto confidence (`applyGstConfidenceOverlay`) — still not shopping-side trust
+
+Portal lookups are frequently blocked from servers; without `GST_VERIFY_URL` you still get honest format-only `[gst]` audit lines. **Fuzzy MCA matching remains a next step.**
+
+**Demo button:** “Buy white Star Wars t-shirt” — external catalog path (needs `APIFY_TOKEN`; can take longer; loading label explains it). GST bridge only fires when listings include a GSTIN.
 
 ### Pre-demo: IndiaMART trade name → MCA match (re-tested)
 
