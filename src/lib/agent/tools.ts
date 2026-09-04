@@ -102,7 +102,7 @@ export function createBuyerTools(
 
   const search_catalog = tool({
     description:
-      "Search external catalog providers (IndiaMART first) for a PRODUCT goal not covered by the seed catalog. Finds candidates, asks TrustGate per merchant, then ranks CAPTURE-first by price. Returns status: authorized (may pay capture), requires_confirmation (HOLD recommendation — do NOT auto-pay), no_viable, or no_suppliers. Does not invent trust. Use instead of forcing a seed-catalog mismatch.",
+      "Search external catalog providers (IndiaMART first) for a PRODUCT goal not covered by the seed catalog. Finds candidates; TrustGate runs product/price integrity then seller checks; ranks CAPTURE-first by price. May include shoppingReliability warnings. Returns status: authorized (may pay capture), requires_confirmation (HOLD recommendation — do NOT auto-pay), no_viable, or no_suppliers. Does not invent trust. Use instead of forcing a seed-catalog mismatch.",
     inputSchema: z.object({
       query: z.string().min(1),
       budget: z.number().positive().optional(),

@@ -35,13 +35,24 @@ export async function runShoppingAgent(
 ): Promise<ShoppingAgentResult> {
   const evaluation = await search_catalog(input, ctx, userPolicy)
   const ranked = applyShoppingDecision(evaluation, ctx)
-  logAudit("agent", `[shopping] ${ranked.summary}`, {
+  const reliabilityNote =
+    ranked.shoppingReliability && ranked.shoppingReliability.level !== "none"
+      ? `\n[warning] ${ranked.shoppingReliability.message}`
+      : ""
+  const summary = ranked.summary + reliabilityNote
+  logAudit("agent", `[shopping] ${summary}`, {
     status: ranked.status,
     chosenSellerId: ranked.chosen?.sellerId,
     chosenName: ranked.chosen?.candidate.merchantName,
     action: ranked.chosen?.recommendedAction,
+    reliability: ranked.shoppingReliability?.level,
   })
-  return { ...ranked, shoppingAgent: true }
+  return {
+    ...ranked,
+    summary,
+    reason: summary,
+    shoppingAgent: true,
+  }
 }
 
 /** Pure ranking — exported for tests. */
@@ -56,6 +67,7 @@ export function applyShoppingDecision(
     budgetNote,
     candidates,
     noSuppliers,
+    shoppingReliability,
   } = evaluation
 
   if (noSuppliers || candidates.length === 0) {
@@ -73,6 +85,7 @@ export function applyShoppingDecision(
       holds: [],
       summary,
       reason: summary,
+      shoppingReliability: evaluation.shoppingReliability,
     }
   }
 
@@ -108,6 +121,7 @@ export function applyShoppingDecision(
       chosen: cheapestCapture,
       summary,
       reason: summary,
+      shoppingReliability,
     }
   }
 
@@ -134,6 +148,7 @@ export function applyShoppingDecision(
       chosen: cheapestHold,
       summary,
       reason: summary,
+      shoppingReliability,
     }
   }
 
@@ -149,6 +164,7 @@ export function applyShoppingDecision(
     holds: [],
     summary,
     reason: summary,
+      shoppingReliability,
   }
 }
 

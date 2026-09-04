@@ -49,6 +49,7 @@ function candidate(name: string, amount: number | null): CatalogCandidate {
     source: "indiamart",
     sourceUrl: null,
     city: null,
+    productName: null,
     gstin: null,
   }
 }

@@ -106,3 +106,9 @@
 - GitHub: https://github.com/Ishan-Malhotra/trustgate
 - README: [README.md](./README.md)
 - Prep notes: [PREP.md](./PREP.md)
+
+## Phase 12 — TrustGate proposal integrity + shopping warnings
+- **Done:** Product integrity + peer price integrity around catalog proposals (`src/lib/trustgate/`)
+- **Done:** Shopping reliability caution/unreliable warnings; demo TrustGate intervening banner
+- **Done:** search_catalog evaluates proposals via TrustGate harness; ShoppingAgent ranks permitted only
+- **Tests:** product/price/reliability/evaluateCatalogProposals cases (PS5 accessory, extreme ₹200, valid cheapest camera)

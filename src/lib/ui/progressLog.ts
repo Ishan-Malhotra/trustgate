@@ -10,6 +10,9 @@ export function isEvaluationProgressEntry(entry: AuditEntry): boolean {
     if (entry.message.includes("[search_catalog]")) return true
     if (entry.message.includes("[live-lookup]")) return true
     if (entry.message.includes("[gst]")) return true
+    if (entry.message.includes("[product]")) return true
+    if (entry.message.includes("[price]")) return true
+    if (entry.message.includes("[warning]")) return true
     if (entry.message.startsWith("Tool call:")) return true
     if (entry.message.startsWith("Tool result:")) return false
     return entry.message.length < 280
@@ -27,6 +30,15 @@ export function formatProgressEntry(entry: AuditEntry): string {
   }
   if (msg.includes("[gst]")) {
     return msg.replace("[gst]", "GST:").trim()
+  }
+  if (msg.includes("[product]")) {
+    return msg.replace("[product]", "Product:").trim()
+  }
+  if (msg.includes("[price]")) {
+    return msg.replace("[price]", "Price:").trim()
+  }
+  if (msg.includes("[warning]")) {
+    return msg.replace("[warning]", "Warning:").trim()
   }
   if (msg.includes("[search_catalog]")) {
     return msg.replace("[search_catalog]", "Catalog:").trim()

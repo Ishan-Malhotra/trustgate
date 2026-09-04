@@ -64,7 +64,9 @@ EXTERNAL CATALOG SEARCH (product goals NOT covered by the seed catalog above):
   * status "no_suppliers" or "no_viable": do NOT call payment tools; explain honestly; do not invent sellers or fall back to unrelated seed merchants.
 - Terminology: CAPTURE = "authorized for automatic purchase"; HOLD = "bounded hold / requires confirmation"; REFUSE = "transaction refused".
 - User policy confirm_above_amount is a confirmation threshold (e.g. "User policy requires confirmation above ₹300"), never an "auto-approval threshold".
-- Walk through suppliers found → each TrustGate decision → final pick with price + TrustGate reasoning in your reply.`;
+- Walk through suppliers found → each TrustGate decision → final pick with price + TrustGate reasoning in your reply.
+- If shoppingReliability.level is "caution" or "unreliable", you MUST surface that warning to the user (TrustGate intervening / shopping agent unreliable). Never hide integrity refuses.
+- Product mismatch and extreme price anomaly proposals are REFUSE — never call authorizeOrCapture for them.`;
 }
 
 export interface PurchaseRequestResult {

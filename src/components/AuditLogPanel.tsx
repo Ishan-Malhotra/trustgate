@@ -61,7 +61,10 @@ export function AuditLogPanel({ entries, loading }: AuditLogPanelProps) {
                       entry.message.includes("[live-lookup]") ||
                       entry.message.includes("[search_catalog]") ||
                       entry.message.includes("[shopping-agent]") ||
-                      entry.message.includes("[gst]")
+                      entry.message.includes("[gst]") ||
+                      entry.message.includes("[product]") ||
+                      entry.message.includes("[price]") ||
+                      entry.message.includes("[warning]")
                     ? "border-cyan-500/40 bg-cyan-950/30"
                     : "border-zinc-800/80 bg-zinc-950/60"
               }`}

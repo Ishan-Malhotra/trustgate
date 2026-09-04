@@ -9,6 +9,8 @@ export interface AgentContext {
   decisionsBySellerId: Record<string, FinalDecision>
   trustChecks: SellerTrustCheck[]
   liveMerchants: Record<string, Seller>
+  /** Accumulated shopping integrity failures this request (TrustGate reliability). */
+  shoppingIntegrityFailureCount?: number
 }
 
 export function storeTrustDecision(

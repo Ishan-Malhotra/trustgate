@@ -114,8 +114,12 @@ export function mapIndiamartItem(item: IndiamartRawItem): CatalogCandidate | nul
   if (gstin) {
     raw.gstNumber = gstin
   }
-  if (typeof item.productName === "string" && item.productName.trim()) {
-    raw.productName = item.productName.trim()
+  const productName =
+    typeof item.productName === "string" && item.productName.trim()
+      ? item.productName.trim()
+      : null
+  if (productName) {
+    raw.productName = productName
   }
 
   return {
@@ -125,6 +129,7 @@ export function mapIndiamartItem(item: IndiamartRawItem): CatalogCandidate | nul
     source: "indiamart",
     sourceUrl,
     city,
+    productName,
     gstin,
     ...(Object.keys(raw).length > 0 ? { raw } : {}),
   }

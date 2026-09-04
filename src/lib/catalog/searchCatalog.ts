@@ -1,11 +1,7 @@
 import { searchIndiamart } from "@/lib/catalog/providers/indiamart"
-import type {
-  CatalogCandidate,
-  CatalogEvaluatedCandidate,
-  CatalogEvaluationResult,
-} from "@/lib/catalog/types"
+import type { CatalogEvaluationResult } from "@/lib/catalog/types"
 import type { AgentContext } from "@/lib/agent/context"
-import { runLookupUnknownMerchant } from "@/lib/agent/lookupUnknownMerchant"
+import { evaluateCatalogProposals } from "@/lib/trustgate/evaluateCatalogProposals"
 import { logAudit } from "@/lib/audit/logger"
 import type { UserPolicy } from "@/lib/types"
 
@@ -18,8 +14,8 @@ export interface SearchCatalogInput {
 }
 
 /**
- * Catalog infrastructure: search → normalize → ask TrustGate.
- * Does not invent trust or rank for purchase; ShoppingAgent ranks by action then price.
+ * Catalog infrastructure: search → normalize → TrustGate proposal evaluation.
+ * ShoppingAgent ranks only TrustGate-permitted actions.
  */
 export async function search_catalog(
   input: SearchCatalogInput,
@@ -49,51 +45,22 @@ export async function search_catalog(
   }
 
   const shortlist = rawCandidates.slice(0, MAX_CATALOG_CANDIDATES)
-  const evaluated: CatalogEvaluatedCandidate[] = []
-
-  for (const candidate of shortlist) {
-    const amountUsed = resolveAmount(candidate, budget)
-    const decision = await runLookupUnknownMerchant(ctx, userPolicy, {
-      name: candidate.merchantName,
-      amount: amountUsed,
-      gstin: candidate.gstin ?? undefined,
-    })
-
-    const row: CatalogEvaluatedCandidate = {
-      candidate,
-      amountUsed,
-      sellerId: decision.sellerId,
-      recommendedAction: decision.recommendedAction,
-      effectiveScore: decision.effectiveScore,
-      effectiveTier: decision.effectiveTier,
-      riskScore: decision.riskScore,
-      confidenceBand: decision.confidenceBand,
-      trustReason: decision.trustReason,
-    }
-    evaluated.push(row)
-
-    logAudit(
-      "agent",
-      `[search_catalog] Candidate ${candidate.merchantName} @ ₹${candidate.amount ?? "n/a"} → TrustGate ${decision.recommendedAction}`,
-      {
-        merchantName: candidate.merchantName,
-        listingPrice: candidate.amount,
-        amountUsed,
-        source: candidate.source,
-        sellerId: decision.sellerId,
-        action: decision.recommendedAction,
-        effectiveScore: decision.effectiveScore,
-        effectiveTier: decision.effectiveTier,
-        riskScore: decision.riskScore,
-        confidenceBand: decision.confidenceBand,
-      }
-    )
-  }
+  const { evaluated, shoppingReliability } = await evaluateCatalogProposals(
+    query,
+    shortlist,
+    ctx,
+    userPolicy,
+    budget
+  )
 
   logAudit(
     "agent",
     `[search_catalog] Evaluated ${evaluated.length} candidate(s) for "${query}" — ranking deferred to ShoppingAgent`,
-    { query, evaluated: evaluated.length }
+    {
+      query,
+      evaluated: evaluated.length,
+      reliability: shoppingReliability.level,
+    }
   )
 
   return {
@@ -103,12 +70,6 @@ export async function search_catalog(
     budgetNote,
     candidates: evaluated,
     noSuppliers: false,
+    shoppingReliability,
   }
-}
-
-function resolveAmount(candidate: CatalogCandidate, budget: number): number {
-  if (candidate.amount !== null && candidate.amount > 0) {
-    return candidate.amount
-  }
-  return budget
 }

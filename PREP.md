@@ -219,6 +219,17 @@ Deterministic bypass (seed only): `POST /api/evaluate` with `{ sellerId, amount,
 
 ---
 
+## TrustGate proposal integrity (shopping harness)
+
+ShoppingAgent proposals are **untrusted**. Before seller/policy ranking, TrustGate runs:
+
+1. **Product integrity** — does the listing match the original user request? (fail closed; accessories for primary goods → REFUSE)
+2. **Price integrity** — peer-relative anomaly vs other matching listings (extreme → REFUSE; moderate → floor HOLD)
+3. Existing seller MCA + trust + user policy
+4. **Shopping reliability warning** — caution / unreliable when the shopping source hallucinates or keeps proposing bad deals (demo `[warning]` banner)
+
+Files: `src/lib/trustgate/*`. ShoppingAgent still only ranks TrustGate-permitted actions.
+
 ## Catalog search (Shopping Agent / providers)
 
 Shopping Agent finds deals. Catalog providers search + normalize. **TrustGate alone** decides if a deal can be transacted.

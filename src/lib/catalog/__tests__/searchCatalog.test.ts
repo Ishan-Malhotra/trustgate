@@ -36,7 +36,8 @@ function makeCtx(): AgentContext {
 
 function candidate(
   name: string,
-  amount: number | null
+  amount: number | null,
+  productName?: string | null
 ): CatalogCandidate {
   return {
     merchantName: name,
@@ -45,6 +46,7 @@ function candidate(
     source: "indiamart",
     sourceUrl: null,
     city: null,
+    productName: productName === undefined ? name : productName,
     gstin: null,
   }
 }
@@ -71,8 +73,8 @@ describe("search_catalog (evaluate-only)", () => {
 
   it("evaluates candidates without ranking or choosing", async () => {
     vi.mocked(searchIndiamart).mockResolvedValue([
-      candidate("Alpha Traders", 100),
-      candidate("Beta Mart", 90),
+      candidate("Alpha Traders", 100, "Cotton T Shirt"),
+      candidate("Beta Mart", 90, "Cotton T Shirt"),
     ])
     vi.mocked(runLookupUnknownMerchant)
       .mockResolvedValueOnce({
@@ -96,7 +98,7 @@ describe("search_catalog (evaluate-only)", () => {
 
     const ctx = makeCtx()
     const result = await search_catalog(
-      { query: "t-shirt", budget: 200 },
+      { query: "cotton t shirt", budget: 200 },
       ctx,
       userPolicy
     )
@@ -112,9 +114,9 @@ describe("search_catalog (evaluate-only)", () => {
 
   it("preserves TrustGate actions for CAPTURE, HOLD, and REFUSE", async () => {
     vi.mocked(searchIndiamart).mockResolvedValue([
-      candidate("Cheap Bad Co", 50),
-      candidate("Mid Good Co", 120),
-      candidate("Pricey Hold Co", 200),
+      candidate("Cheap Bad Co", 50, "Cotton Tee"),
+      candidate("Mid Good Co", 120, "Cotton Tee"),
+      candidate("Pricey Hold Co", 200, "Cotton Tee"),
     ])
     vi.mocked(runLookupUnknownMerchant)
       .mockResolvedValueOnce({
@@ -159,7 +161,7 @@ describe("search_catalog (evaluate-only)", () => {
 
   it("falls back to userPolicy budget and states it explicitly", async () => {
     vi.mocked(searchIndiamart).mockResolvedValue([
-      candidate("No Price Co", null),
+      candidate("No Price Co", null, "Gadget Kit"),
     ])
     vi.mocked(runLookupUnknownMerchant).mockResolvedValue({
       sellerId: "live:np",

@@ -6,6 +6,8 @@ import type { ChatMessage } from "@/lib/ui/types";
 import { actionColor, actionLabel, formatInr } from "@/lib/ui/types";
 import { SellerEvaluationSummary } from "@/components/SellerEvaluationSummary";
 import { EvaluationProgress } from "@/components/EvaluationProgress";
+import { TrustGateWarning } from "@/components/TrustGateWarning";
+import { extractShoppingWarning } from "@/lib/ui/shoppingWarning";
 
 interface ChatPanelProps {
   messages: ChatMessage[];
@@ -52,6 +54,7 @@ export function ChatPanel({
   onQuickDemo,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
+  const shoppingWarning = extractShoppingWarning(progressEntries);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -171,6 +174,16 @@ export function ChatPanel({
             active={loading}
             title={loadingLabel}
           />
+        )}
+
+        {shoppingWarning && (
+          <div className="mt-2">
+            <TrustGateWarning
+              level={shoppingWarning.level}
+              message={shoppingWarning.message}
+              details={shoppingWarning.details}
+            />
+          </div>
         )}
       </div>
 

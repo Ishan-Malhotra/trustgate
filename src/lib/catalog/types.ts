@@ -7,6 +7,8 @@ export interface CatalogCandidate {
   source: CatalogSource
   sourceUrl: string | null
   city: string | null
+  /** Listing title when present — TrustGate product integrity uses this as an untrusted claim. */
+  productName: string | null
   /** GSTIN when present on listing — TrustGate may verify; shopping does not decide trust. */
   gstin: string | null
   /** Optional passthrough extras — not used for trust decisions by shopping agent. */
@@ -25,6 +27,37 @@ export type CatalogSearchStatus =
   | "no_viable"
   | "no_suppliers"
 
+export interface ProductIntegrityResult {
+  match: boolean
+  requested: string
+  found: string
+  reason: string
+}
+
+export interface PriceIntegrityResult {
+  quotedPrice: number
+  referenceRange?: { min: number; max: number }
+  anomaly: "none" | "moderate" | "extreme"
+  reason: string
+}
+
+export type ShoppingReliabilityLevel = "none" | "caution" | "unreliable"
+
+export type ShoppingReliabilityTrigger =
+  | "product_mismatch"
+  | "extreme_price"
+  | "seller_refuse_streak"
+
+export interface ShoppingReliabilityWarning {
+  level: ShoppingReliabilityLevel
+  badProposalCount: number
+  totalProposals: number
+  failureRate: number
+  message: string
+  triggers: ShoppingReliabilityTrigger[]
+  details: string[]
+}
+
 export interface CatalogEvaluatedCandidate {
   candidate: CatalogCandidate
   amountUsed: number
@@ -35,6 +68,8 @@ export interface CatalogEvaluatedCandidate {
   riskScore?: number
   confidenceBand?: string
   trustReason?: string
+  productIntegrity?: ProductIntegrityResult
+  priceIntegrity?: PriceIntegrityResult
 }
 
 /**
@@ -50,6 +85,7 @@ export interface CatalogEvaluationResult {
   /** True when IndiaMART returned no mappable suppliers. */
   noSuppliers: boolean
   summary?: string
+  shoppingReliability?: ShoppingReliabilityWarning
 }
 
 export interface CatalogSearchResult {
@@ -67,4 +103,5 @@ export interface CatalogSearchResult {
   summary: string
   /** Short reason for the shopping decision (same intent as summary, for callers). */
   reason: string
+  shoppingReliability?: ShoppingReliabilityWarning
 }
