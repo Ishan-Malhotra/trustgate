@@ -49,12 +49,12 @@ function candidate(
   }
 }
 
-describe("search_catalog", () => {
+describe("search_catalog (evaluate-only)", () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it("returns no_suppliers when catalog is empty", async () => {
+  it("returns noSuppliers when catalog is empty", async () => {
     vi.mocked(searchIndiamart).mockResolvedValue([])
 
     const result = await search_catalog(
@@ -63,12 +63,13 @@ describe("search_catalog", () => {
       userPolicy
     )
 
-    expect(result.status).toBe("no_suppliers")
+    expect(result.noSuppliers).toBe(true)
+    expect(result.candidates).toHaveLength(0)
     expect(result.summary).toMatch(/No suppliers found/i)
     expect(runLookupUnknownMerchant).not.toHaveBeenCalled()
   })
 
-  it("returns no_viable when all TrustGate decisions refuse", async () => {
+  it("evaluates candidates without ranking or choosing", async () => {
     vi.mocked(searchIndiamart).mockResolvedValue([
       candidate("Alpha Traders", 100),
       candidate("Beta Mart", 90),
@@ -86,30 +87,34 @@ describe("search_catalog", () => {
       .mockResolvedValueOnce({
         sellerId: "live:b",
         sellerName: "Beta Mart",
-        recommendedAction: "refuse",
+        recommendedAction: "hold",
         effectiveScore: 15,
         effectiveTier: "low",
         riskScore: 15,
         trustReason: "no match",
       } as never)
 
+    const ctx = makeCtx()
     const result = await search_catalog(
       { query: "t-shirt", budget: 200 },
-      makeCtx(),
+      ctx,
       userPolicy
     )
 
-    expect(result.status).toBe("no_viable")
-    expect(result.chosen).toBeUndefined()
-    expect(result.summary).toMatch(/No viable seller found/i)
-    expect(result.approved).toHaveLength(0)
+    expect(result.noSuppliers).toBe(false)
+    expect(result.candidates).toHaveLength(2)
+    expect(result.candidates.map((c) => c.recommendedAction)).toEqual([
+      "refuse",
+      "hold",
+    ])
+    expect(ctx.chosenSellerId).toBeUndefined()
   })
 
-  it("filters refused and picks cheapest among TrustGate-approved", async () => {
+  it("preserves TrustGate actions for CAPTURE, HOLD, and REFUSE", async () => {
     vi.mocked(searchIndiamart).mockResolvedValue([
       candidate("Cheap Bad Co", 50),
       candidate("Mid Good Co", 120),
-      candidate("Pricey Good Co", 200),
+      candidate("Pricey Hold Co", 200),
     ])
     vi.mocked(runLookupUnknownMerchant)
       .mockResolvedValueOnce({
@@ -132,7 +137,7 @@ describe("search_catalog", () => {
       } as never)
       .mockResolvedValueOnce({
         sellerId: "live:pricey",
-        sellerName: "Pricey Good Co",
+        sellerName: "Pricey Hold Co",
         recommendedAction: "hold",
         effectiveScore: 75,
         effectiveTier: "high",
@@ -140,18 +145,16 @@ describe("search_catalog", () => {
         trustReason: "registry verified",
       } as never)
 
-    const ctx = makeCtx()
     const result = await search_catalog(
       { query: "cotton tee", budget: 500 },
-      ctx,
+      makeCtx(),
       userPolicy
     )
 
-    expect(result.status).toBe("ok")
-    expect(result.approved).toHaveLength(2)
-    expect(result.chosen?.candidate.merchantName).toBe("Mid Good Co")
-    expect(result.chosen?.sellerId).toBe("live:mid")
-    expect(ctx.chosenSellerId).toBe("live:mid")
+    expect(result.candidates).toHaveLength(3)
+    expect(result.candidates[0].recommendedAction).toBe("refuse")
+    expect(result.candidates[1].recommendedAction).toBe("capture")
+    expect(result.candidates[2].recommendedAction).toBe("hold")
   })
 
   it("falls back to userPolicy budget and states it explicitly", async () => {
@@ -179,11 +182,10 @@ describe("search_catalog", () => {
     expect(result.budgetNote).toMatch(
       /no budget specified, using your default limit of ₹5000/i
     )
-    expect(result.summary).toMatch(/default limit of ₹5000/i)
     expect(runLookupUnknownMerchant).toHaveBeenCalledWith(
       expect.anything(),
       userPolicy,
-      { name: "No Price Co", amount: 5000 }
+      { name: "No Price Co", amount: 5000, gstin: undefined }
     )
   })
 })

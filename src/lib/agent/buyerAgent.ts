@@ -56,10 +56,14 @@ LIVE MERCHANT LOOKUP (merchants NOT in the catalog above):
 
 EXTERNAL CATALOG SEARCH (product goals NOT covered by the seed catalog above):
 - If the user wants a PRODUCT that no seed seller lists (e.g. clothing, electronics not in the catalog), call search_catalog({ query, budget? }).
-- search_catalog finds real catalog candidates (IndiaMART first), asks TrustGate to verify each merchant, and ranks TrustGate-approved deals by price. You do NOT invent trust or inspect GST yourself.
+- search_catalog finds real catalog candidates (IndiaMART first), asks TrustGate to verify each merchant, then ranks CAPTURE-first by price (HOLD is never treated as automatic purchase). You do NOT invent trust or inspect GST yourself.
 - Never force a seed-catalog mismatch when search_catalog is the right path.
-- If status is no_suppliers or no_viable, explain honestly and do NOT invent sellers or fall back to unrelated seed merchants.
-- If status is ok and chosen recommendedAction is capture or hold, call authorizeOrCapture with that sellerId, amount, and action. Payment is a separate TrustGate step after an approved deal exists.
+- Follow the structured status exactly — never reinterpret HOLD as approval or "purchased":
+  * status "authorized": chosen is CAPTURE. You MAY call authorizeOrCapture with action "capture" for that sellerId and amount only. Explain they were the cheapest seller authorized for automatic purchase.
+  * status "requires_confirmation": chosen is HOLD. Do NOT call authorizeOrCapture. Tell the user no seller was eligible for automatic capture. Show the cheapest constrained seller, TrustGate reason, and the maximum permitted hold amount (amountUsed). Ask if they want to proceed with a bounded hold. Never say "successfully purchased", "payment captured", or "approved" for a HOLD.
+  * status "no_suppliers" or "no_viable": do NOT call payment tools; explain honestly; do not invent sellers or fall back to unrelated seed merchants.
+- Terminology: CAPTURE = "authorized for automatic purchase"; HOLD = "bounded hold / requires confirmation"; REFUSE = "transaction refused".
+- User policy confirm_above_amount is a confirmation threshold (e.g. "User policy requires confirmation above ₹300"), never an "auto-approval threshold".
 - Walk through suppliers found → each TrustGate decision → final pick with price + TrustGate reasoning in your reply.`;
 }
 

@@ -77,13 +77,14 @@
 
 ## Phase 10 — Catalog provider + Shopping Agent (TrustGate stays the gate)
 - **Architecture:** Shopping Agent finds deals; Catalog Provider searches/normalizes; TrustGate alone decides if a deal can be transacted
-- **Flow:** `search → normalize → ask TrustGate → rank approved → return` (tool/API: `search_catalog`, not `shopForProduct`)
-- **Done:** `src/lib/catalog/` — types, IndiaMART provider (Apify), `search_catalog()` ranks TrustGate-approved by price
+- **Flow:** `search → normalize → ask TrustGate → ShoppingAgent CAPTURE-first rank → return` (tool/API: `search_catalog`, not `shopForProduct`)
+- **Done:** `src/lib/catalog/` — types, IndiaMART provider (Apify), `search_catalog()` evaluate-only (TrustGate per candidate)
 - **Done:** Shared `runLookupUnknownMerchant` extracted; existing live-lookup tool unchanged in behavior
-- **Done:** Thin `shoppingAgent.ts` wrapper; agent tool `search_catalog`; prompt branch for product goals outside seed catalog
-- **Done:** Demo chip “Buy white Star Wars t-shirt”; loading label for catalog search; audit highlights `[search_catalog]`
+- **Done:** `shoppingAgent.ts` CAPTURE-first ranking; statuses `authorized` / `requires_confirmation` / `no_viable`; HOLD never auto-purchased
+- **Done:** BuyerAgent + tool copy follow shopping status; seed/Infosys flows unchanged
+- **Done:** Demo chip “Buy white Star Wars t-shirt”; loading label for catalog search; audit highlights `[search_catalog]` / `[shopping]`
 - **Env:** `APIFY_TOKEN`, `APIFY_INDIAMART_ACTOR_ID` (default `sourabhbgp~indiamart-scraper`; `makework36~indiamart-suppliers-scraper` still supported)
-- **Tests:** IndiaMART mapping/cache/failure; search_catalog no_viable / cheapest approved / default budget note
+- **Tests:** shoppingAgent hierarchy (CAPTURE beats HOLD, cheapest HOLD, no_viable); search_catalog evaluate-only; IndiaMART mapping/cache/failure
 - **Not done here:** Extra providers (ONDC/Shopify), shopping-side trust/GST approval, hardcoded fallback suppliers
 - **Still next step (day-of risk):** Fuzzy MCA name matching. GST verification **shipped** (format/checksum + optional legal-name MCA retry). Re-tested 2026-09-03: Star Wars chip ≈2/5 exact MCA hits (Berryblues, ORN); trade names miss without GSTIN. **Set `DATA_GOV_IN_API_KEY`**. Optional `GST_VERIFY_URL` when portal is blocked.
 

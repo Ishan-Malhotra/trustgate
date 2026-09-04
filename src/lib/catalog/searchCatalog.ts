@@ -2,7 +2,7 @@ import { searchIndiamart } from "@/lib/catalog/providers/indiamart"
 import type {
   CatalogCandidate,
   CatalogEvaluatedCandidate,
-  CatalogSearchResult,
+  CatalogEvaluationResult,
 } from "@/lib/catalog/types"
 import type { AgentContext } from "@/lib/agent/context"
 import { runLookupUnknownMerchant } from "@/lib/agent/lookupUnknownMerchant"
@@ -18,14 +18,14 @@ export interface SearchCatalogInput {
 }
 
 /**
- * Catalog infrastructure: search → normalize → ask TrustGate → rank approved.
- * Does not invent trust; TrustGate decides each candidate.
+ * Catalog infrastructure: search → normalize → ask TrustGate.
+ * Does not invent trust or rank for purchase; ShoppingAgent ranks by action then price.
  */
 export async function search_catalog(
   input: SearchCatalogInput,
   ctx: AgentContext,
   userPolicy: UserPolicy
-): Promise<CatalogSearchResult> {
+): Promise<CatalogEvaluationResult> {
   const query = input.query.trim()
   const usedDefaultBudget = input.budget === undefined
   const budget = input.budget ?? userPolicy.max_spend_per_transaction
@@ -38,13 +38,12 @@ export async function search_catalog(
     const summary = `No suppliers found in the catalog for "${query}".`
     logAudit("agent", `[search_catalog] ${summary}`, { query })
     return {
-      status: "no_suppliers",
       query,
       budget,
       usedDefaultBudget,
       budgetNote,
       candidates: [],
-      approved: [],
+      noSuppliers: true,
       summary: budgetNote ? `${summary} (${budgetNote})` : summary,
     }
   }
@@ -91,45 +90,19 @@ export async function search_catalog(
     )
   }
 
-  const approved = evaluated.filter((row) => row.recommendedAction !== "refuse")
-  const chosen = pickCheapestApproved(approved)
-
-  if (!chosen) {
-    const summary = buildNoViableSummary(query, evaluated, budgetNote)
-    logAudit("agent", `[search_catalog] ${summary}`, {
-      query,
-      evaluated: evaluated.length,
-    })
-    return {
-      status: "no_viable",
-      query,
-      budget,
-      usedDefaultBudget,
-      budgetNote,
-      candidates: evaluated,
-      approved: [],
-      summary,
-    }
-  }
-
-  ctx.chosenSellerId = chosen.sellerId
-  const summary = buildChosenSummary(query, chosen, approved, evaluated, budgetNote)
-  logAudit("agent", `[search_catalog] ${summary}`, {
-    query,
-    chosenSellerId: chosen.sellerId,
-    chosenName: chosen.candidate.merchantName,
-  })
+  logAudit(
+    "agent",
+    `[search_catalog] Evaluated ${evaluated.length} candidate(s) for "${query}" — ranking deferred to ShoppingAgent`,
+    { query, evaluated: evaluated.length }
+  )
 
   return {
-    status: "ok",
     query,
     budget,
     usedDefaultBudget,
     budgetNote,
     candidates: evaluated,
-    approved,
-    chosen,
-    summary,
+    noSuppliers: false,
   }
 }
 
@@ -138,79 +111,4 @@ function resolveAmount(candidate: CatalogCandidate, budget: number): number {
     return candidate.amount
   }
   return budget
-}
-
-function pickCheapestApproved(
-  approved: CatalogEvaluatedCandidate[]
-): CatalogEvaluatedCandidate | undefined {
-  if (approved.length === 0) return undefined
-
-  const priced = approved.filter(
-    (row) => row.candidate.amount !== null && row.candidate.amount > 0
-  )
-  if (priced.length === 0) return approved[0]
-
-  return priced.reduce((best, row) =>
-    (row.candidate.amount as number) < (best.candidate.amount as number)
-      ? row
-      : best
-  )
-}
-
-function buildNoViableSummary(
-  query: string,
-  evaluated: CatalogEvaluatedCandidate[],
-  budgetNote?: string
-): string {
-  const lines = evaluated.map(
-    (row) =>
-      `- ${row.candidate.merchantName} (₹${row.candidate.amount ?? "n/a"}): TrustGate ${row.recommendedAction}`
-  )
-  const base = `No viable seller found for "${query}" — catalog returned candidates but none were TrustGate-approved.\n${lines.join("\n")}`
-  return budgetNote ? `${base}\n(${budgetNote})` : base
-}
-
-function buildChosenSummary(
-  query: string,
-  chosen: CatalogEvaluatedCandidate,
-  approved: CatalogEvaluatedCandidate[],
-  evaluated: CatalogEvaluatedCandidate[],
-  budgetNote?: string
-): string {
-  const refused = evaluated.filter((row) => row.recommendedAction === "refuse")
-  const alt = approved
-    .filter((row) => row.sellerId !== chosen.sellerId)
-    .map((row) => {
-      const price = row.candidate.amount
-      const cheaper =
-        price !== null &&
-        chosen.candidate.amount !== null &&
-        price < chosen.candidate.amount
-      return `${row.candidate.merchantName} (₹${price ?? "n/a"}${cheaper ? ", cheaper but not chosen" : ""}, TrustGate ${row.recommendedAction})`
-    })
-
-  const parts = [
-    `Catalog search for "${query}" evaluated ${evaluated.length} candidate(s).`,
-    ...evaluated.map(
-      (row) =>
-        `- ${row.candidate.merchantName}: listing ₹${row.candidate.amount ?? "n/a"}, TrustGate ${row.recommendedAction}` +
-        (row.effectiveScore !== undefined
-          ? ` (effective ${row.effectiveScore}/${row.effectiveTier})`
-          : "")
-    ),
-    `Chose ${chosen.candidate.merchantName} @ ₹${chosen.candidate.amount ?? chosen.amountUsed} — TrustGate ${chosen.recommendedAction}` +
-      (chosen.trustReason ? `; ${chosen.trustReason}` : ""),
-  ]
-
-  if (refused.length > 0) {
-    parts.push(
-      `Filtered ${refused.length} refused candidate(s): ${refused.map((r) => r.candidate.merchantName).join(", ")}.`
-    )
-  }
-  if (alt.length > 0) {
-    parts.push(`Other approved options: ${alt.join("; ")}.`)
-  }
-  if (budgetNote) parts.push(`(${budgetNote})`)
-
-  return parts.join("\n")
 }

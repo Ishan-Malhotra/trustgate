@@ -30,7 +30,7 @@ Open [http://localhost:3000](http://localhost:3000). Ask for a **goal** (e.g. "G
 1. User sends a goal or names a merchant.
 2. **Seed sellers:** agent calls `checkTrust` on catalog matches.
 3. **Unknown merchants:** agent calls `lookupUnknownMerchant` → MCA registry → confidence + risk. If MCA misses and a GSTIN is present, TrustGate validates GST and may retry MCA with the legal name.
-4. **Product outside seed catalog:** agent calls `search_catalog` → IndiaMART (Apify) → TrustGate per candidate → rank approved by price.
+4. **Product outside seed catalog:** agent calls `search_catalog` → IndiaMART (Apify) → TrustGate per candidate → ShoppingAgent ranks **CAPTURE-first** by price (HOLD needs confirmation; never auto-purchased).
 5. Compare trust, confidence, price, and policy; then `authorizeOrCapture` or `refuse`.
 6. Audit log highlights `[live-lookup]`, `[search_catalog]`, and `[gst]`.
 
@@ -50,7 +50,7 @@ Open [http://localhost:3000](http://localhost:3000). Ask for a **goal** (e.g. "G
 | Phone case, best price | Gaming seller (`DealDash Express`) is cheapest at ₹89 |
 | Coffee tasting ~₹450 | High-trust seller still **held** by user policy |
 | Pay Infosys ₹250 | Live MCA lookup for a real company outside seed data |
-| Buy white Star Wars t-shirt | IndiaMART catalog → TrustGate verify → cheapest approved (needs `APIFY_TOKEN`) |
+| Buy white Star Wars t-shirt | IndiaMART catalog → TrustGate verify → cheapest CAPTURE, else cheapest HOLD recommendation (needs `APIFY_TOKEN`) |
 
 Dev mode (seller panel, **off** by default) reloads scores for debugging. It is not the demo view.
 
@@ -68,11 +68,13 @@ Set `DATA_GOV_IN_API_KEY` in `.env.local` (register at [data.gov.in](https://dat
 
 ### Catalog discovery (IndiaMART)
 
-`search_catalog` finds live suppliers, then asks TrustGate before ranking by price:
+`search_catalog` finds live suppliers and asks TrustGate; ShoppingAgent ranks by action then price:
 
 ```
-search → normalize → ask TrustGate → rank approved → return
+search → normalize → ask TrustGate → rank CAPTURE-first by price → return
 ```
+
+Statuses: `authorized` (auto-purchase CAPTURE) | `requires_confirmation` (cheapest HOLD, no auto-pay) | `no_viable` | `no_suppliers`.
 
 Needs `APIFY_TOKEN`. Default actor: `sourabhbgp~indiamart-scraper`. Without a token, external search returns an honest empty result (no invented suppliers).
 

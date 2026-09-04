@@ -18,10 +18,12 @@ export interface CatalogProvider {
   search: (query: string) => Promise<CatalogCandidate[]>
 }
 
+/** Final shopping-layer status after capture-first ranking. */
 export type CatalogSearchStatus =
-  | "ok"
-  | "no_suppliers"
+  | "authorized"
+  | "requires_confirmation"
   | "no_viable"
+  | "no_suppliers"
 
 export interface CatalogEvaluatedCandidate {
   candidate: CatalogCandidate
@@ -35,6 +37,21 @@ export interface CatalogEvaluatedCandidate {
   trustReason?: string
 }
 
+/**
+ * Raw TrustGate evaluations from catalog infrastructure.
+ * ShoppingAgent applies capture-first ranking on top of this.
+ */
+export interface CatalogEvaluationResult {
+  query: string
+  budget: number
+  usedDefaultBudget: boolean
+  budgetNote?: string
+  candidates: CatalogEvaluatedCandidate[]
+  /** True when IndiaMART returned no mappable suppliers. */
+  noSuppliers: boolean
+  summary?: string
+}
+
 export interface CatalogSearchResult {
   status: CatalogSearchStatus
   query: string
@@ -42,7 +59,12 @@ export interface CatalogSearchResult {
   usedDefaultBudget: boolean
   budgetNote?: string
   candidates: CatalogEvaluatedCandidate[]
+  /** CAPTURE only — eligible for automatic purchase. */
   approved: CatalogEvaluatedCandidate[]
+  /** HOLD only — bounded authorization / requires confirmation. */
+  holds: CatalogEvaluatedCandidate[]
   chosen?: CatalogEvaluatedCandidate
   summary: string
+  /** Short reason for the shopping decision (same intent as summary, for callers). */
+  reason: string
 }

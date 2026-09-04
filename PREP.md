@@ -61,7 +61,7 @@ User message
         → Product outside seed catalog?  search_catalog({ query, budget? })
             → Catalog provider (IndiaMART) search + normalize
             → ask TrustGate (same lookup path) per candidate
-            → rank TrustGate-approved by price
+            → ShoppingAgent ranks CAPTURE-first by price (HOLD = requires_confirmation)
         → authorizeOrCapture  OR  refuse
     → Human-readable explanation
     → Audit log + chat UI update
@@ -201,7 +201,7 @@ Claude (via Vercel AI SDK + Anthropic) with a system prompt that includes the pu
 |------|------|--------------|
 | `checkTrust` | Seed catalog sellers | `evaluateTrust` + `applyUserPolicy`, logs trust + policy |
 | `lookupUnknownMerchant` | Real company not in seed data | MCA lookup → synthetic seller → confidence → same gates + reasoning chain |
-| `search_catalog` | Product goal **not** covered by seed listings | Catalog provider search → normalize → ask TrustGate per candidate → rank approved by price |
+| `search_catalog` | Product goal **not** covered by seed listings | Catalog search → TrustGate per candidate → ShoppingAgent CAPTURE-first rank (`authorized` / `requires_confirmation` / `no_viable`) |
 | `authorizeOrCapture` | After a check | Runs Razorpay capture or hold using the **stored** decision for that seller |
 | `refuse` | Agent chooses not to pay | Logs refusal; no Razorpay |
 
@@ -228,15 +228,15 @@ search_catalog
   → Catalog Provider (IndiaMART first; ONDC/Shopify later)
   → normalize CatalogCandidate { merchantName, amount, source, … }
   → ask TrustGate (runLookupUnknownMerchant) for each shortlisted candidate
-  → rank TrustGate-approved (lowest price); refuse-filtered out
+  → ShoppingAgent: cheapest CAPTURE → authorized; else cheapest HOLD → requires_confirmation (no auto-pay); else no_viable
   → return structured result for the buyer agent to narrate / pay
 ```
 
 Files:
 - `src/lib/catalog/types.ts` — provider-agnostic candidate + search result
 - `src/lib/catalog/providers/indiamart.ts` — Apify IndiaMART actor (default `sourabhbgp~indiamart-scraper`), session cache, never invents suppliers
-- `src/lib/catalog/searchCatalog.ts` — `search_catalog()` orchestration
-- `src/lib/agent/shoppingAgent.ts` — thin wrapper (no GST/risk logic)
+- `src/lib/catalog/searchCatalog.ts` — `search_catalog()` evaluate-only (search + TrustGate)
+- `src/lib/agent/shoppingAgent.ts` — CAPTURE-first ranking + shopping statuses (no TrustGate math)
 - `src/lib/agent/lookupUnknownMerchant.ts` — shared TrustGate live path used by tool + catalog
 
 GST on IndiaMART search rows is often empty. When a **GSTIN is present**, TrustGate now:
@@ -339,7 +339,7 @@ Quick demos (chat buttons):
 3. Phone case, best price — DealDash gaming seller is cheapest
 4. Coffee tasting ~₹450 — high trust + policy hold
 5. Pay Infosys ₹250 — live MCA path
-6. Buy white Star Wars t-shirt — external catalog → TrustGate verify → rank approved
+6. Buy white Star Wars t-shirt — external catalog → TrustGate verify → CAPTURE-first rank
 
 ---
 
@@ -362,7 +362,7 @@ Quick demos (chat buttons):
 3. **Policy overrides trust** — coffee ~₹450 held despite high trust (confirm threshold).
 4. **Gaming seller** — DealDash cheapest phone case; recent dispute spike shows up in score + log.
 5. **Live lookup** — Infosys (or another real MCA company); confidence vs risk visible; `[live-lookup]` in audit.
-6. **External catalog** — Star Wars t-shirt chip; `[search_catalog]` candidates → TrustGate decisions → cheapest approved (or honest no_viable).
+6. **External catalog** — Star Wars t-shirt chip; `[search_catalog]` → TrustGate → ShoppingAgent CAPTURE-first (HOLD is recommendation only, never auto-purchased).
 7. **Editable policy** — change confirm threshold, re-run, outcome changes immediately.
 8. **End-to-end log** — trust reasoning and policy reasoning both readable for every decision.
 
