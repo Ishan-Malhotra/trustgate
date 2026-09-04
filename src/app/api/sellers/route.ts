@@ -5,6 +5,7 @@ import { getSpendLimit } from "@/lib/trust/getSpendLimit";
 import { getUserPolicy } from "@/lib/config/runtimePolicy";
 import { isLlmConfigured, getAnthropicWorkspaceId } from "@/lib/config/env";
 import { isRazorpayConfigured } from "@/lib/razorpay/client";
+import { isPaymentsKilled } from "@/lib/config/killSwitch";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -32,5 +33,6 @@ export async function GET(request: Request) {
     llmConfigured: isLlmConfigured(),
     anthropicWorkspaceConfigured: Boolean(getAnthropicWorkspaceId()),
     razorpayConfigured: isRazorpayConfigured(),
+    paymentsKilled: isPaymentsKilled(),
   });
 }

@@ -64,7 +64,8 @@ export function AuditLogPanel({ entries, loading }: AuditLogPanelProps) {
                       entry.message.includes("[gst]") ||
                       entry.message.includes("[product]") ||
                       entry.message.includes("[price]") ||
-                      entry.message.includes("[warning]")
+                      entry.message.includes("[warning]") ||
+                      entry.message.includes("[kill-switch]")
                     ? "border-cyan-500/40 bg-cyan-950/30"
                     : "border-zinc-800/80 bg-zinc-950/60"
               }`}

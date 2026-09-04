@@ -8,6 +8,10 @@ import { getAnthropicProvider, missingAnthropicConfigMessage } from "@/lib/confi
 import type { UserPolicy } from "@/lib/types";
 import type { PaymentExecutionResult } from "@/lib/razorpay/executePayment";
 import { getUserPolicy } from "@/lib/config/runtimePolicy";
+import {
+  isPaymentsKilled,
+  KILL_SWITCH_MESSAGE,
+} from "@/lib/config/killSwitch";
 
 function buildSystemPrompt(): string {
   const catalog = getAllSellers()
@@ -83,6 +87,15 @@ export async function runBuyerAgent(
   userMessage: string,
   userPolicy?: UserPolicy
 ): Promise<PurchaseRequestResult> {
+  if (isPaymentsKilled()) {
+    logAudit("refusal", `[kill-switch] Stopped buyer agent for: ${userMessage}`);
+    return {
+      response: KILL_SWITCH_MESSAGE,
+      evaluatedSellers: [],
+      auditLog: getAuditLog(),
+    };
+  }
+
   const activePolicy = userPolicy ?? getUserPolicy();
   const ctx: AgentContext = {
     decisionsBySellerId: {},

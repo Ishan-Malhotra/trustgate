@@ -47,6 +47,7 @@ export interface SellersResponse {
   llmConfigured?: boolean;
   anthropicWorkspaceConfigured?: boolean;
   razorpayConfigured?: boolean;
+  paymentsKilled?: boolean;
 }
 
 export interface EvaluateResponse {

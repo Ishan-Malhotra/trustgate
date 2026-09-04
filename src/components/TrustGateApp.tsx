@@ -49,7 +49,9 @@ export function TrustGateApp() {
   const [logLoading, setLogLoading] = useState(false);
   const [llmConfigured, setLlmConfigured] = useState(false);
   const [razorpayConfigured, setRazorpayConfigured] = useState(false);
+  const [paymentsKilled, setPaymentsKilled] = useState(false);
   const [bootError, setBootError] = useState<string>();
+  const [killSwitchBusy, setKillSwitchBusy] = useState(false);
 
   const fetchSellers = useCallback(
     async (showScores: boolean, options?: { syncPolicy?: boolean }) => {
@@ -64,6 +66,7 @@ export function TrustGateApp() {
       }
       setLlmConfigured(Boolean(data.llmConfigured));
       setRazorpayConfigured(Boolean(data.razorpayConfigured));
+      setPaymentsKilled(Boolean(data.paymentsKilled));
     },
     []
   );
@@ -128,6 +131,38 @@ export function TrustGateApp() {
       .then((res) => res.json())
       .then((data) => setUserPolicy(data.userPolicy as UserPolicy))
       .catch(() => setUserPolicy(USER_POLICY));
+  };
+
+  const handleToggleKillSwitch = async () => {
+    const next = !paymentsKilled;
+    setKillSwitchBusy(true);
+    try {
+      const res = await fetch("/api/kill-switch", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ killed: next }),
+      });
+      if (!res.ok) throw new Error("Kill switch update failed");
+      const data = await res.json();
+      setPaymentsKilled(Boolean(data.paymentsKilled));
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: uid(),
+          role: "assistant",
+          content: next
+            ? "Kill switch engaged. All autonomous payments are disabled — agents will not run purchases and ₹0 will go to Razorpay until you re-enable."
+            : "Kill switch released. Autonomous payments are enabled again.",
+        },
+      ]);
+      await fetchAuditLog({ silent: true });
+    } catch (err) {
+      setBootError(
+        err instanceof Error ? err.message : "Kill switch update failed"
+      );
+    } finally {
+      setKillSwitchBusy(false);
+    }
   };
 
   async function runPurchase(
@@ -226,27 +261,74 @@ export function TrustGateApp() {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 lg:p-6">
       <header className="shrink-0">
-        <h1 className="text-xl font-semibold tracking-tight text-zinc-100">
-          TrustGate
-        </h1>
-        <p className="text-sm text-zinc-500">
-          AI buyer-agent — trust score + user policy before payment
-        </p>
-        <p className="mt-1 text-xs text-zinc-500">
-          Agent:{" "}
-          <span className={llmConfigured ? "text-emerald-400" : "text-amber-400"}>
-            {llmConfigured ? "Anthropic ready" : "missing ANTHROPIC_API_KEY"}
-          </span>
-          {" · "}
-          Razorpay:{" "}
-          <span
-            className={
-              razorpayConfigured ? "text-emerald-400" : "text-zinc-500"
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight text-zinc-100">
+              TrustGate
+            </h1>
+            <p className="text-sm text-zinc-500">
+              AI buyer-agent — trust score + user policy before payment
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Agent:{" "}
+              <span
+                className={
+                  llmConfigured ? "text-emerald-400" : "text-amber-400"
+                }
+              >
+                {llmConfigured
+                  ? "Anthropic ready"
+                  : "missing ANTHROPIC_API_KEY"}
+              </span>
+              {" · "}
+              Razorpay:{" "}
+              <span
+                className={
+                  razorpayConfigured ? "text-emerald-400" : "text-zinc-500"
+                }
+              >
+                {razorpayConfigured ? "test keys loaded" : "mock mode"}
+              </span>
+              {" · "}
+              Payments:{" "}
+              <span
+                className={
+                  paymentsKilled ? "text-red-400" : "text-emerald-400"
+                }
+              >
+                {paymentsKilled ? "KILL SWITCH ON" : "enabled"}
+              </span>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleToggleKillSwitch()}
+            disabled={killSwitchBusy || loading}
+            aria-pressed={paymentsKilled}
+            aria-label={
+              paymentsKilled
+                ? "Re-enable autonomous payments"
+                : "Engage kill switch — disable all autonomous payments"
             }
+            className={`shrink-0 rounded-lg border px-4 py-2 text-sm font-semibold uppercase tracking-wide transition-colors disabled:opacity-50 ${
+              paymentsKilled
+                ? "border-emerald-600/60 bg-emerald-950/50 text-emerald-300 hover:border-emerald-500"
+                : "border-red-600/70 bg-red-950/60 text-red-200 hover:border-red-500 hover:bg-red-900/50"
+            }`}
           >
-            {razorpayConfigured ? "test keys loaded" : "mock mode"}
-          </span>
-        </p>
+            {paymentsKilled ? "Resume payments" : "Stop all payments"}
+          </button>
+        </div>
+        {paymentsKilled && (
+          <p
+            className="mt-3 rounded-lg border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-200"
+            role="status"
+            aria-live="polite"
+          >
+            Kill switch engaged — autonomous agents and Razorpay calls are
+            blocked. ₹0 will move until you resume payments.
+          </p>
+        )}
       </header>
 
       <div className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-5">

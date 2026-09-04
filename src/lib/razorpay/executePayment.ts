@@ -4,6 +4,10 @@ import { createOrder } from "./createOrder";
 import { isRazorpayConfigured } from "./client";
 import { withRazorpayRetry } from "./retry";
 import { logAudit } from "@/lib/audit/logger";
+import {
+  assertPaymentsAllowed,
+  KILL_SWITCH_MESSAGE,
+} from "@/lib/config/killSwitch";
 
 export interface PaymentExecutionResult {
   success: boolean;
@@ -29,6 +33,23 @@ export async function executeApprovedPayment(input: {
   action: "capture" | "hold";
 }): Promise<PaymentExecutionResult> {
   const { sellerId, sellerName, amount, action } = input;
+
+  const kill = assertPaymentsAllowed();
+  if (!kill.ok) {
+    logAudit("refusal", `[kill-switch] Blocked ${action} for ${sellerName}`, {
+      sellerId,
+      amount,
+    });
+    return {
+      success: false,
+      flagged: false,
+      retried: false,
+      mode: isRazorpayConfigured() ? "razorpay" : "mock",
+      action,
+      amount,
+      error: KILL_SWITCH_MESSAGE,
+    };
+  }
 
   if (!isRazorpayConfigured()) {
     const mock: PaymentExecutionResult = {

@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { runBuyerAgent } from "@/lib/agent/buyerAgent";
 import { setUserPolicy } from "@/lib/config/runtimePolicy";
+import {
+  isPaymentsKilled,
+  KILL_SWITCH_MESSAGE,
+} from "@/lib/config/killSwitch";
+import { getAuditLog, logAudit } from "@/lib/audit/logger";
 
 const policySchema = z.object({
   max_spend_per_transaction: z.number().positive(),
@@ -26,6 +31,16 @@ export async function POST(request: Request) {
   const userPolicy = parsed.data.userPolicy
     ? setUserPolicy(parsed.data.userPolicy)
     : undefined;
+
+  if (isPaymentsKilled()) {
+    logAudit("refusal", `[kill-switch] Stopped agent for: ${parsed.data.message}`);
+    return NextResponse.json({
+      response: KILL_SWITCH_MESSAGE,
+      evaluatedSellers: [],
+      auditLog: getAuditLog(),
+      paymentsKilled: true,
+    });
+  }
 
   try {
     const result = await runBuyerAgent(parsed.data.message, userPolicy);

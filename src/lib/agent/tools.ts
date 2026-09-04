@@ -9,6 +9,7 @@ import type { UserPolicy } from "@/lib/types"
 import { getUserPolicy } from "@/lib/config/runtimePolicy"
 import { runLookupUnknownMerchant } from "@/lib/agent/lookupUnknownMerchant"
 import { runShoppingAgent } from "@/lib/agent/shoppingAgent"
+import { assertPaymentsAllowed } from "@/lib/config/killSwitch"
 import {
   storeTrustDecision,
   type AgentContext,
@@ -120,6 +121,16 @@ export function createBuyerTools(
       action: z.enum(["capture", "hold"]),
     }),
     execute: async ({ sellerId, amount, action }) => {
+      const kill = assertPaymentsAllowed()
+      if (!kill.ok) {
+        logAudit("refusal", `[kill-switch] Blocked authorizeOrCapture`, {
+          sellerId,
+          amount,
+          action,
+        })
+        return { error: kill.error, paymentsKilled: true }
+      }
+
       const seller = resolveSeller(sellerId, ctx)
       if (!seller) {
         return { error: `Seller not found: ${sellerId}` }

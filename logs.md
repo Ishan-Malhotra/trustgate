@@ -112,3 +112,9 @@
 - **Done:** Shopping reliability caution/unreliable warnings; demo TrustGate intervening banner
 - **Done:** search_catalog evaluates proposals via TrustGate harness; ShoppingAgent ranks permitted only
 - **Tests:** product/price/reliability/evaluateCatalogProposals cases (PS5 accessory, extreme ₹200, valid cheapest camera)
+
+## Kill switch — stop all autonomous payments
+- **Done:** `src/lib/config/killSwitch.ts` + `/api/kill-switch` — one toggle disables payments instantly
+- **Done:** Blocks `/api/purchase` agent runs, `authorizeOrCapture`, and `executeApprovedPayment`
+- **Done:** Header button “Stop all payments” / “Resume payments” + status banner; audit `[kill-switch]`
+- **Tests:** killSwitch unit tests

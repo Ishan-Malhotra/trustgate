@@ -13,6 +13,7 @@ export function isEvaluationProgressEntry(entry: AuditEntry): boolean {
     if (entry.message.includes("[product]")) return true
     if (entry.message.includes("[price]")) return true
     if (entry.message.includes("[warning]")) return true
+    if (entry.message.includes("[kill-switch]")) return true
     if (entry.message.startsWith("Tool call:")) return true
     if (entry.message.startsWith("Tool result:")) return false
     return entry.message.length < 280
@@ -39,6 +40,9 @@ export function formatProgressEntry(entry: AuditEntry): string {
   }
   if (msg.includes("[warning]")) {
     return msg.replace("[warning]", "Warning:").trim()
+  }
+  if (msg.includes("[kill-switch]")) {
+    return msg.replace("[kill-switch]", "Kill switch:").trim()
   }
   if (msg.includes("[search_catalog]")) {
     return msg.replace("[search_catalog]", "Catalog:").trim()

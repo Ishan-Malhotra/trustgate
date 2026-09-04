@@ -230,6 +230,17 @@ ShoppingAgent proposals are **untrusted**. Before seller/policy ranking, TrustGa
 
 Files: `src/lib/trustgate/*`. ShoppingAgent still only ranks TrustGate-permitted actions.
 
+### Kill switch (demo control)
+
+One header button (**Stop all payments**) engages a server kill switch:
+
+- Stops buyer-agent purchase runs immediately (`/api/purchase`)
+- Blocks `authorizeOrCapture` and `executeApprovedPayment` (₹0 to Razorpay)
+- Audits `[kill-switch]` and tells the user in chat
+- **Resume payments** re-enables
+
+File: `src/lib/config/killSwitch.ts` · API: `/api/kill-switch`
+
 ## Catalog search (Shopping Agent / providers)
 
 Shopping Agent finds deals. Catalog providers search + normalize. **TrustGate alone** decides if a deal can be transacted.
