@@ -277,7 +277,20 @@ Deterministic bypass (seed only): `POST /api/evaluate` with `{ sellerId, amount,
 ShoppingAgent proposals are **untrusted**. Before seller/policy ranking, TrustGate runs:
 
 1. **Product integrity** — does the listing match the original user request? (fail closed; accessories for primary goods → REFUSE). Example: “Buy me a PS5” + “PS5 Controller Cover” → REFUSE.
-2. **Price integrity** — peer-relative anomaly vs other **product-matching** listings (extreme → REFUSE; moderate → floor HOLD). Example: ₹200 PS5 vs ₹39,999–₹42,000 peers → extreme REFUSE. ₹4,500 camera vs ₹5,200/₹6,000 → fine.
+2. **Price integrity** — soft peer-relative signal only (never a standalone REFUSE). Requires ≥5 priced product-matching candidates in the **same search batch**; with today’s `MAX_CATALOG_CANDIDATES = 3` the check is skipped and audited. Extreme/moderate anomalies annotate the decision; seller MCA/policy still decide capture/hold/refuse.
+
+### Price anomaly — how it works (spec)
+
+| Question | Answer |
+|----------|--------|
+| Where is peer median from? | **This search batch only** — other product-matching catalog listings after product integrity. No stored market index. |
+| Typical sample size? | IndiaMART shortlist is capped at **3** (`MAX_CATALOG_CANDIDATES`), so a median is usually **not** computed. |
+| When can it fire? | Only if the priced product-matching **pool ≥ 5**. Below that → skip + `[price] Skipped anomaly check — insufficient sample size` in audit. |
+| Thresholds | Heuristic ratios vs peer median (not calibrated MSRP): **extreme** if quoted/median `< 0.15` or `> 6`; **moderate** if `< 0.4` or `> 2.5`. |
+| Decision impact | Soft signal / confidence-style annotation only. **Never refuse on price alone.** Clean MCA + cheap outlier → still follow seller TrustGate action. |
+
+Files: `src/lib/trustgate/priceIntegrity.ts`, `evaluateCatalogProposals.ts`.
+
 3. Existing seller MCA/GST/trust + user policy
 4. **Shopping reliability warning** — caution / unreliable when the shopping source hallucinates or keeps proposing bad deals (demo `[warning]` / TrustGate intervening banner)
 
@@ -555,4 +568,5 @@ PREP.md                    this file — demo prep reference
 | 2026-09-02 | Initial prep doc covering seed catalog, trust/policy gates, agent tools, MCA live lookup, Razorpay, UI, demo checklist |
 | 2026-09-05 | Current stage: IndiaMART catalog, GST bridge, CAPTURE-first HOLD semantics, proposal integrity + shopping warnings, kill switch; fixed stale “GST not built” / flow / API / demo checklist |
 | 2026-09-05 | Fuzzy MCA: normalized name variants + similarity gate in `fuzzyCompanyName.ts` / `mcaLookup.ts` |
+| 2026-09-05 | Price anomaly: batch-only peers, min pool 5, soft signal (never standalone refuse); explanation multi-reason ordered list |
 | 2026-09-05 | Payment + control-plane hardening: server `assertPaymentAuthorized`, catalog HOLD cannot auto-pay, no lastDecision fallback, catalog name sanitization, ControlGate / `TRUSTGATE_CONTROL_SECRET` (local open, Vercel fail-closed) |

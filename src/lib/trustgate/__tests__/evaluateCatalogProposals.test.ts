@@ -103,15 +103,16 @@ describe("evaluateCatalogProposals", () => {
     expect(runLookupUnknownMerchant).toHaveBeenCalled()
   })
 
-  it("₹200 PS5 among peers is extreme refuse", async () => {
+  it("₹200 PS5 in a tiny batch does not fire price anomaly (<5 pool)", async () => {
     vi.mocked(runLookupUnknownMerchant).mockResolvedValue({
       sellerId: "live:ok",
       recommendedAction: "capture",
       effectiveScore: 80,
       effectiveTier: "high",
+      trustReason: "registry verified",
     } as never)
 
-    const { evaluated, shoppingReliability } = await evaluateCatalogProposals(
+    const { evaluated } = await evaluateCatalogProposals(
       "Buy me a PS5",
       [
         cand("Sony PlayStation 5 Console", 200, "Too Cheap"),
@@ -124,11 +125,40 @@ describe("evaluateCatalogProposals", () => {
     )
 
     const cheap = evaluated.find((e) => e.candidate.amount === 200)
-    expect(cheap?.recommendedAction).toBe("refuse")
-    expect(cheap?.priceIntegrity?.anomaly).toBe("extreme")
-    expect(shoppingReliability.level).not.toBe("none")
-    // Fair peers still get seller lookup
+    expect(cheap?.priceIntegrity?.anomaly).toBe("none")
+    expect(cheap?.priceIntegrity?.reason).toMatch(/insufficient sample|pool size/i)
+    expect(cheap?.recommendedAction).toBe("capture")
     expect(runLookupUnknownMerchant).toHaveBeenCalled()
+  })
+
+  it("extreme price with large pool + clean MCA is NOT refused on price alone", async () => {
+    vi.mocked(runLookupUnknownMerchant).mockResolvedValue({
+      sellerId: "live:ok",
+      recommendedAction: "capture",
+      effectiveScore: 85,
+      effectiveTier: "high",
+      trustReason: "MCA Active — high confidence",
+      confidenceBand: "high",
+    } as never)
+
+    const { evaluated } = await evaluateCatalogProposals(
+      "Buy me a PS5",
+      [
+        cand("Sony PlayStation 5 Console", 200, "Too Cheap"),
+        cand("Sony PlayStation 5 Console", 39999, "Fair A"),
+        cand("Sony PlayStation 5 Console", 42000, "Fair B"),
+        cand("Sony PlayStation 5 Console", 41000, "Fair C"),
+        cand("Sony PlayStation 5 Console", 40500, "Fair D"),
+      ],
+      makeCtx(),
+      userPolicy,
+      50000
+    )
+
+    const cheap = evaluated.find((e) => e.candidate.amount === 200)
+    expect(cheap?.priceIntegrity?.anomaly).toBe("extreme")
+    expect(cheap?.recommendedAction).toBe("capture")
+    expect(cheap?.trustReason).toMatch(/soft price signal/i)
   })
 
   it("₹4500 camera among peers is not refused for being cheapest", async () => {

@@ -126,6 +126,12 @@
 - **Tests:** fuzzyCompanyName unit tests + mcaLookup punctuation / reject-unrelated cases
 - **Limit:** still cannot invent a legal name from an unrelated trade name without GSTIN
 
+## Price anomaly guardrails + multi-reason explanations
+- **Done:** Peer median = this search batch only; require ≥5 priced product-matching candidates or skip + audit
+- **Done:** Extreme/moderate price = soft signal only — never standalone REFUSE (clean MCA cheap outlier can still capture)
+- **Done:** Explanation `reasons[]` ordered trust/confidence before policy; deterministic + LLM validation for multi-reason sellers
+- **Tests:** pool `<5` skip; large-pool extreme + clean MCA not refused; Custom Diam Jewel two-reason prose; MAHAVIR cross-seller regression
+
 ## Payment + control-plane hardening
 - **Why:** Catalog HOLD / confirmation was prompt-only; `authorizeOrCapture` could capture a HOLD seller, reuse another seller’s decision, and public APIs were unauthenticated
 - **Done:** `src/lib/agent/assertPaymentAuthorized.ts` — action must match stored TrustGate decision (`capture` cannot override `hold`); refuse / spend limit still fail closed

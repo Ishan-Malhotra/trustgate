@@ -70,7 +70,7 @@ const saijee: SellerTrustCheck = {
   liveLookup: true,
 }
 
-describe("classifyPrimaryReason", () => {
+describe("classifyPrimaryReason / multi-reason", () => {
   it("labels CIRP refusal as adverse registry, not confidence", () => {
     const result = classifyPrimaryReason(mahavir)
     expect(result.primaryReasonType).toBe("adverse_registry_status")
@@ -81,6 +81,52 @@ describe("classifyPrimaryReason", () => {
     const result = classifyPrimaryReason(anax)
     expect(result.primaryReasonType).toBe("insufficient_confidence")
     expect(result.primaryReasonDetail).toMatch(/insufficient verifiable history/i)
+  })
+
+  it("lists trust/confidence before policy when both apply", () => {
+    const jewel: SellerTrustCheck = {
+      sellerId: "live:jewel",
+      sellerName: "Custom Diam Jewel",
+      amount: 12000,
+      score: 0,
+      tier: "low",
+      riskScore: 0,
+      riskTier: "low",
+      effectiveScore: 0,
+      effectiveTier: "low",
+      spendLimit: 200,
+      recommendedAction: "refuse",
+      trustReason: "Insufficient verifiable history — trial spend capped at ₹200",
+      policyReason:
+        "Amount ₹12000 exceeds max_spend_per_transaction (₹5000)",
+      confidenceLevel: 15,
+      confidenceBand: "low",
+      confidenceReasons: [
+        "Not found in MCA Company Master Data — insufficient verifiable history",
+      ],
+      liveLookup: true,
+    }
+
+    const result = classifyPrimaryReason(jewel)
+    expect(result.reasons.map((r) => r.type)).toEqual([
+      "insufficient_confidence",
+      "policy_threshold",
+    ])
+    expect(result.primaryReasonType).toBe("insufficient_confidence")
+
+    const facts = buildExplanationSellerFacts(jewel)
+    const text = buildDeterministicExplanation("Custom Diam Jewel", [facts])
+    expect(text).toMatch(/insufficient verifiable history/i)
+    expect(text).toMatch(/also/i)
+    expect(text).toMatch(/exceeds.*₹?5000|max_spend/i)
+  })
+
+  it("keeps single-reason sellers as a single citation", () => {
+    const facts = buildExplanationSellerFacts(anax)
+    expect(facts.reasons).toHaveLength(1)
+    const text = buildDeterministicExplanation("Anax Impex", [facts])
+    expect(text).toMatch(/Anax Impex was held:.*Insufficient verifiable history/i)
+    expect(text).not.toMatch(/also/i)
   })
 })
 
@@ -152,11 +198,36 @@ describe("validateExplanationText", () => {
     expect(validateExplanationText(badLlm, sellers)).toBe(false)
   })
 
-  it("accepts text that cites CIRP for MAHAVIR without other sellers' confidence", () => {
-    const sellers = [mahavir, anax, saijee].map(buildExplanationSellerFacts)
-    const good =
-      "Anax Impex held for insufficient verifiable history. MAHAVIR INDUSTRIES LIMITED was refused: MCA status is Under CIRP (not Active). Saijee Impex held: not found in MCA."
+  it("rejects prose that keeps only the policy reason when trust also applies", () => {
+    const jewel = buildExplanationSellerFacts({
+      sellerId: "live:jewel",
+      sellerName: "Custom Diam Jewel",
+      amount: 12000,
+      score: 0,
+      tier: "low",
+      riskScore: 0,
+      riskTier: "low",
+      effectiveScore: 0,
+      effectiveTier: "low",
+      spendLimit: 200,
+      recommendedAction: "refuse",
+      trustReason: "Insufficient verifiable history — trial spend capped at ₹200",
+      policyReason:
+        "Amount ₹12000 exceeds max_spend_per_transaction (₹5000)",
+      confidenceLevel: 15,
+      confidenceBand: "low",
+      confidenceReasons: [
+        "Not found in MCA Company Master Data — insufficient verifiable history",
+      ],
+      liveLookup: true,
+    })
 
-    expect(validateExplanationText(good, sellers)).toBe(true)
+    const policyOnly =
+      "Custom Diam Jewel was refused because it exceeds your ₹5,000 policy limit."
+    expect(validateExplanationText(policyOnly, [jewel])).toBe(false)
+
+    const both =
+      "Custom Diam Jewel was refused: insufficient verifiable history (₹200 cap); also exceeds your ₹5,000 policy limit."
+    expect(validateExplanationText(both, [jewel])).toBe(true)
   })
 })

@@ -8,15 +8,13 @@ import type {
 import type { UserPolicy } from "@/lib/types"
 import { candidateToProposal } from "@/lib/trustgate/agentProposal"
 import { checkProductIntegrity } from "@/lib/trustgate/productIntegrity"
-import { checkPriceIntegrity } from "@/lib/trustgate/priceIntegrity"
+import {
+  checkPriceIntegrity,
+  MIN_PRICE_POOL_SIZE,
+} from "@/lib/trustgate/priceIntegrity"
 import { assessShoppingReliability } from "@/lib/trustgate/shoppingReliability"
 
 type TrustAction = "capture" | "hold" | "refuse"
-
-function worseAction(a: TrustAction, b: TrustAction): TrustAction {
-  const rank = { refuse: 2, hold: 1, capture: 0 }
-  return rank[a] >= rank[b] ? a : b
-}
 
 function resolveAmount(candidate: CatalogCandidate, budget: number): number {
   if (candidate.amount !== null && candidate.amount > 0) return candidate.amount
@@ -24,8 +22,9 @@ function resolveAmount(candidate: CatalogCandidate, budget: number): number {
 }
 
 /**
- * TrustGate harness: product → price → existing seller/policy.
+ * TrustGate harness: product → price (soft) → existing seller/policy.
  * ShoppingAgent proposals are untrusted claims.
+ * Price anomaly never refuses on its own — seller/policy decide the action.
  */
 export async function evaluateCatalogProposals(
   userRequest: string,
@@ -63,10 +62,23 @@ export async function evaluateCatalogProposals(
     }
   }
 
-  // Pass 2: price integrity using product-matching peers
+  // Pass 2: price integrity using product-matching peers in THIS batch only
   const matchingIndexes = productResults
     .map((r, i) => (r.match ? i : -1))
     .filter((i) => i >= 0)
+
+  const poolPrices = matchingIndexes
+    .map((i) => candidates[i].amount)
+    .filter((p): p is number => p !== null && p > 0)
+  const poolSize = poolPrices.length
+
+  if (poolSize < MIN_PRICE_POOL_SIZE) {
+    logAudit(
+      "trust_check",
+      `[price] Skipped anomaly check — insufficient sample size (${poolSize} priced product-matching candidate(s); need ≥${MIN_PRICE_POOL_SIZE}). Peer median is batch-only and not meaningful on tiny IndiaMART shortlists.`,
+      { poolSize, minRequired: MIN_PRICE_POOL_SIZE, matchingCount: matchingIndexes.length }
+    )
+  }
 
   const priceResults = proposals.map((p, i) => {
     if (!productResults[i].match) {
@@ -88,7 +100,7 @@ export async function evaluateCatalogProposals(
       .filter((j) => j !== i)
       .map((j) => candidates[j].amount)
       .filter((price): price is number => price !== null && price > 0)
-    return checkPriceIntegrity(p.price, otherPeers)
+    return checkPriceIntegrity(p.price, otherPeers, { poolSize })
   })
 
   for (let i = 0; i < candidates.length; i++) {
@@ -102,16 +114,16 @@ export async function evaluateCatalogProposals(
         : ""
       logAudit(
         "trust_check",
-        `[price] ⚠ Extreme price anomaly — Agent proposed: ${label} — ₹${price.quotedPrice}. ${range} → REFUSE → ₹0 to Razorpay`,
+        `[price] ⚠ Extreme price anomaly (soft signal — not a standalone refuse) — ${label} — ₹${price.quotedPrice}. ${range}`,
         { seller: c.merchantName, anomaly: price.anomaly, reason: price.reason }
       )
     } else if (price.anomaly === "moderate") {
       logAudit(
         "trust_check",
-        `[price] ⚠ Moderate price anomaly — ${label} — ₹${price.quotedPrice} → floor HOLD`,
+        `[price] ⚠ Moderate price anomaly (soft signal) — ${label} — ₹${price.quotedPrice}`,
         { seller: c.merchantName, anomaly: price.anomaly, reason: price.reason }
       )
-    } else {
+    } else if (!price.reason.includes("Skipped") && !price.reason.includes("skipped")) {
       logAudit(
         "trust_check",
         `[price] ✓ Price OK — ${label} — ₹${price.quotedPrice}`,
@@ -120,7 +132,7 @@ export async function evaluateCatalogProposals(
     }
   }
 
-  // Pass 3: seller/policy for survivors; merge actions
+  // Pass 3: seller/policy — price anomaly never refuses alone
   const evaluated: CatalogEvaluatedCandidate[] = []
 
   for (let i = 0; i < candidates.length; i++) {
@@ -129,14 +141,12 @@ export async function evaluateCatalogProposals(
     const productIntegrity = productResults[i]
     const priceIntegrity = priceResults[i]
 
-    if (!productIntegrity.match || priceIntegrity.anomaly === "extreme") {
+    if (!productIntegrity.match) {
       evaluated.push({
         candidate,
         amountUsed,
         recommendedAction: "refuse",
-        trustReason: !productIntegrity.match
-          ? productIntegrity.reason
-          : priceIntegrity.reason,
+        trustReason: productIntegrity.reason,
         productIntegrity,
         priceIntegrity,
       })
@@ -149,10 +159,11 @@ export async function evaluateCatalogProposals(
       gstin: candidate.gstin ?? undefined,
     })
 
-    let action = decision.recommendedAction as TrustAction
-    if (priceIntegrity.anomaly === "moderate") {
-      action = worseAction(action, "hold")
-    }
+    const action = decision.recommendedAction as TrustAction
+    const softPriceNote =
+      priceIntegrity.anomaly !== "none"
+        ? ` Soft price signal: ${priceIntegrity.anomaly} anomaly vs batch peers (not a refuse by itself).`
+        : ""
 
     evaluated.push({
       candidate,
@@ -163,7 +174,7 @@ export async function evaluateCatalogProposals(
       effectiveTier: decision.effectiveTier,
       riskScore: decision.riskScore,
       confidenceBand: decision.confidenceBand,
-      trustReason: decision.trustReason,
+      trustReason: `${decision.trustReason ?? ""}${softPriceNote}`.trim(),
       productIntegrity,
       priceIntegrity,
     })
@@ -185,16 +196,12 @@ export async function evaluateCatalogProposals(
 
   const shoppingReliability = assessShoppingReliability(evaluated, ctx)
   if (shoppingReliability.level !== "none") {
-    logAudit(
-      "agent",
-      `[warning] ${shoppingReliability.message}`,
-      {
-        level: shoppingReliability.level,
-        badProposalCount: shoppingReliability.badProposalCount,
-        totalProposals: shoppingReliability.totalProposals,
-        details: shoppingReliability.details,
-      }
-    )
+    logAudit("agent", `[warning] ${shoppingReliability.message}`, {
+      level: shoppingReliability.level,
+      badProposalCount: shoppingReliability.badProposalCount,
+      totalProposals: shoppingReliability.totalProposals,
+      details: shoppingReliability.details,
+    })
   }
 
   return { evaluated, shoppingReliability }
