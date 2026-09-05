@@ -17,8 +17,9 @@ TrustGate is past the seed-catalog demo. It now:
 5. **Warns** when shopping hallucinates or keeps proposing bad deals (`[warning]` banner)
 6. **Kill switch** — one header button stops all autonomous payments and agent purchase runs instantly
 7. **Control plane** — local demo stays open; Vercel production/preview is locked unless `TRUSTGATE_CONTROL_SECRET` is set
+8. **Fuzzy MCA** — normalized name variants + similarity gate (fail closed below 0.72)
 
-**Still next (not shipped):** fuzzy MCA name matching.
+**Still next:** magic trade-name → unrelated legal-name without GSTIN / stronger evidence (not inventing matches).
 
 | Layer | Status |
 |-------|--------|
@@ -31,7 +32,7 @@ TrustGate is past the seed-catalog demo. It now:
 | Kill switch | Done (this branch) |
 | Server payment gate (`assertPaymentAuthorized`) | Done (this branch) |
 | ControlGate / `TRUSTGATE_CONTROL_SECRET` | Done (this branch) — local open; public deploy fail-closed |
-| Fuzzy MCA matching | Not shipped |
+| Fuzzy MCA matching | Done — variants + similarity ≥ 0.72; weak hits rejected |
 
 ---
 
