@@ -581,3 +581,4 @@ PREP.md                    this file — demo prep reference
 | 2026-09-05 | Catalog payment gate scoped to `lastShoppingSellerIds` — leftover `authorized` status no longer blocks seed / live-lookup sellers |
 | 2026-09-05 | GST overlay cannot invent capture: Active GST on MCA miss stays low-band; low effective tier without high-registry floor holds |
 | 2026-09-05 | Kill switch is shared state (Upstash Redis / local file), not `globalThis` — every payment path re-reads the store |
+| 2026-09-05 | README rewritten as the product usage guide (UI, env, demo chips, decision pipeline). This file stays the deep demo/codebase notes |

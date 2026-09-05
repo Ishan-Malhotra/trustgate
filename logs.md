@@ -211,3 +211,11 @@
 - **Done:** **Dev mode** toggle reveals read-only trust spend formula/caps for inspection
 - **Tests:** getSpendLimit default behavior (trial ₹200, medium formula, high unlimited)
 
+
+
+## README — how to use the product
+
+- **Done:** [README.md](./README.md) rewritten around usage + workings (not a stale API cheat sheet)
+- Covers: local run + env, UI panels, demo chips, editable policy, kill switch, decision pipeline (score → confidence/GST → evaluateTrust → policy → payment gate), three entry paths, catalog HOLD vs seed HOLD, full API table including auth / config / kill-switch
+- Corrected: fuzzy MCA **is** shipped; GST Active on MCA miss stays trial hold; `TRUSTGATE_CONTROL_SECRET` + Upstash kill-switch env documented
+

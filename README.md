@@ -1,112 +1,189 @@
 # TrustGate
 
-An AI buyer-agent that decides whether money can move, using two independent gates:
+An AI buyer-agent that decides whether money is allowed to move.
 
-1. **Trust** — a deterministic score from the seller’s history (recent dispute trend weighted more than the average)
-2. **User policy** — hard spend caps and a confirm-above threshold
+You type a purchase goal or name a merchant. TrustGate evaluates the seller, then either captures a Razorpay **test-mode** payment, authorizes-only (hold), or refuses with **no Razorpay call**.
 
-Both must allow the payment. Trust also sets a **spend limit** (unlimited / cap / refuse), not just a yes/no. A high-trust seller can still be held if the amount crosses the user’s own rules.
+Two independent gates must both allow the payment:
 
-Payments are real Razorpay **test-mode** calls: capture, authorize-only hold, or no API call on refuse.
+1. **Trust** — deterministic score from seller history, plus MCA/GST registry confidence when the merchant is not in the seed catalog
+2. **User policy** — your spend caps and confirm-above threshold
 
-**Architecture boundary:** Shopping / catalog finds the deal. TrustGate decides whether money can move. Catalog does not invent trust from GST or risk heuristics.
+Either gate can block or soften a payment. Neither alone is enough to approve. A high-trust seller can still be held if the amount crosses a rule you set (for example “confirm anything over ₹300”).
 
-## Quick start
+**Architecture boundary:** shopping finds the deal. TrustGate decides whether money can move. Catalog listings, GST Active status, and the LLM prompt do not authorize payment.
+
+---
+
+## How to use it
+
+### 1. Run locally
 
 ```bash
 npm install
 cp .env.example .env.local
-# Required for the agent: RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, ANTHROPIC_API_KEY
-# Recommended: DATA_GOV_IN_API_KEY (MCA live lookup — public sample key rate-limits)
-# Optional catalog: APIFY_TOKEN (+ optional APIFY_INDIAMART_ACTOR_ID)
-# Optional GST proxy: GST_VERIFY_URL (portal is often blocked from servers)
-# Public deploy: TRUSTGATE_CONTROL_SECRET (required on Vercel production/preview)
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Ask for a **goal** (e.g. "Get me the best banana bread you can find"), name a **real company** (e.g. "Pay Infosys Limited ₹250"), or use the **Star Wars t-shirt** chip for live IndiaMART → TrustGate discovery.
+Open [http://localhost:3000](http://localhost:3000).
 
-## How a purchase works
+Minimum for a working chat agent:
 
-1. User sends a goal or names a merchant.
-2. **Seed sellers:** agent calls `checkTrust` on catalog matches.
-3. **Unknown merchants:** agent calls `lookupUnknownMerchant` → MCA registry → confidence + risk. If MCA misses and a GSTIN is present, TrustGate validates GST and may retry MCA with the legal name.
-4. **Product outside seed catalog:** agent calls `search_catalog` → IndiaMART (Apify) → TrustGate per candidate → ShoppingAgent ranks **CAPTURE-first** by price (HOLD needs confirmation; never auto-purchased).
-5. Compare trust, confidence, price, and policy; then `authorizeOrCapture` or `refuse`.
-6. Audit log highlights `[live-lookup]`, `[search_catalog]`, and `[gst]`.
+| Variable | Needed for |
+|----------|------------|
+| `ANTHROPIC_API_KEY` | Buyer agent + explanations (`ANTHROPIC_WORKSPACE_ID` if the key is workspace-bound) |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | Real test payments (without these, payments **mock** and still log) |
+| `DATA_GOV_IN_API_KEY` | Live MCA lookup — strongly recommended; the public sample key rate-limits |
+| `APIFY_TOKEN` | IndiaMART catalog search (Star Wars t-shirt chip). Without it, search returns honest empty — no invented suppliers |
+| `APIFY_INDIAMART_ACTOR_ID` | Optional; defaults to `sourabhbgp~indiamart-scraper` |
+| `GST_VERIFY_URL` | Optional GST portal proxy (servers are often blocked; format/checksum still runs) |
+| `TRUSTGATE_CONTROL_SECRET` | Optional locally. **Required on Vercel production/preview** or APIs return 503 |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Kill switch across Vercel instances. Local `next dev` falls back to `data/kill-switch.json` |
 
-| Trust + policy outcome | Razorpay |
-|------------------------|----------|
-| High trust, within rules | Authorize **and** capture |
-| Medium trust, or over `confirm_above_amount` (₹300) | Authorize only (hold) |
-| Low trust, or over hard max | No Razorpay call |
-| Low **confidence** (registry miss) | Trial hold capped at ₹200 — insufficient verifiable history |
+### 2. What you see
 
-### Demo paths
+The app is a chat-driven buyer, not a checkout page.
 
-| Button | What it exercises |
-|--------|-------------------|
-| Cheapest banana bread | Cheap low-trust listing vs safer bakery |
-| Indian food, safely | Cheap meal kit vs established restaurant |
-| Phone case, best price | Gaming seller (`DealDash Express`) is cheapest at ₹89 |
-| Coffee tasting ~₹450 | High-trust seller still **held** by user policy |
-| Pay Infosys ₹250 | Live MCA lookup for a real company outside seed data |
-| Buy white Star Wars t-shirt | IndiaMART catalog → TrustGate verify → cheapest CAPTURE, else cheapest HOLD recommendation (needs `APIFY_TOKEN`) |
+| Panel | What to do with it |
+|-------|--------------------|
+| **Purchase Request** | Type a goal (“cheapest banana bread”) or a named payee (“Pay Infosys Limited ₹250”). Use the chips under the box for canned demos. |
+| **User Policy** | Edit the four spending rules. Changes save immediately and apply on the next request. **Reset** restores defaults. **Dev mode** reveals read-only trust-engine spend ceilings (not editable). |
+| **Available Sellers** | Seed catalog names and prices. Scores stay hidden until the agent evaluates those sellers. Dev mode shows scores for debugging — turn it off for demos. |
+| **Audit Log** | Full trail: trust, policy, `[live-lookup]`, `[search_catalog]`, `[product]`, `[price]`, `[gst]`, `[payment-gate]`, `[kill-switch]`. **Clear** wipes memory + `data/audit-log.json`. |
+| **Stop all payments** | Header kill switch. Stops the agent and blocks Razorpay until you hit **Resume payments**. |
 
-Dev mode (seller panel, **off** by default) reloads scores for debugging. It is not the demo view.
+On a public Vercel URL you may see an unlock screen first. Enter `TRUSTGATE_CONTROL_SECRET` once (httpOnly cookie). Local `next dev` stays open unless you set that secret yourself.
 
-### Live MCA lookup
+### 3. Ask for something
 
-Merchants not in `data/sellers.json` are looked up via India's Open Government Data **Company Master Data** (MCA registry). Risk (transaction signals) and confidence (registry verification) are separate:
+Type naturally. The agent picks a path:
 
-- **High confidence** + clean risk → normal spend limits
-- **Low confidence** (not found / thin registry) → ₹200 trial hold, not refusal
-- **Adverse registry status** (struck-off / CIRP) → refuse regardless of confidence
+- **Seed seller** — “Get the cheapest banana bread you can find”
+- **Named company not in the catalog** — “Pay Infosys Limited ₹250 for consulting”
+- **Product the seed listings don’t cover** — “Buy a white Star Wars t-shirt” (needs `APIFY_TOKEN`; can take longer)
 
-Matching today is **exact company name + legal-form suffix retries** (e.g. `PRIVATE LIMITED`). Fuzzy name matching is not shipped yet.
+After each run, chat shows a comparison (price, score, action) and a short explanation. The audit log is the source of truth for *why*.
 
-Set `DATA_GOV_IN_API_KEY` in `.env.local` (register at [data.gov.in](https://data.gov.in)). Without it, a public sample key is used (rate-limited under load).
+### Demo chips
 
-### Catalog discovery (IndiaMART)
+| Button | What you should see |
+|--------|---------------------|
+| Cheapest banana bread | Cheap weak seller vs a safer bakery |
+| Indian food, safely | Temptation listing vs Spice Garden |
+| Phone case, best price | DealDash Express is cheapest (₹89) — recent dispute spike should refuse or hold |
+| Coffee tasting ~₹450 | High-trust Blue Bottle **held** because ₹450 > ₹300 confirm threshold |
+| Pay Infosys ₹250 | Live MCA path; high registry confidence can capture despite empty purchase history |
+| Buy white Star Wars t-shirt | IndiaMART → product/price integrity → seller TrustGate → CAPTURE-first rank. HOLD is confirmation-only (not auto-paid) |
 
-`search_catalog` finds live suppliers and asks TrustGate; ShoppingAgent ranks by action then price:
+### 4. Change the rules, then re-run
+
+Defaults (`src/lib/config/userPolicy.ts`):
+
+| Rule | Default | Effect |
+|------|---------|--------|
+| Max per transaction | ₹5000 | Hard refuse above this |
+| Max per seller | ₹10000 | Hard refuse above this (this request only) |
+| Confirm above | ₹300 | Capture becomes **hold** even if trust said capture |
+| Hold expiry | 3600s | Documented window; the demo does not build a full confirm UI |
+
+Trust spend ceilings (₹200 trial, medium formula, high ₹1500 / ₹3000 / unlimited) are **engine constants**, not these fields. Inspect them under Dev mode.
+
+**Punchline:** raise or lower Confirm above, re-run the coffee tasting chip, and watch the outcome change while the trust score stays the same.
+
+### 5. Stop money instantly
+
+**Stop all payments** in the header:
+
+- Blocks `/api/purchase` agent runs
+- Blocks `authorizeOrCapture` and Razorpay execution
+- Writes `[kill-switch]` to the audit log and tells you in chat
+- Status line shows **KILL SWITCH ON** until **Resume payments**
+
+If every purchase says the kill switch is engaged, you left it on from a prior session.
+
+---
+
+## How it works
 
 ```
-search → normalize → ask TrustGate → rank CAPTURE-first by price → return
+User message
+  → Control plane (open locally; locked on Vercel without secret)
+  → Kill switch on?  stop (₹0 Razorpay)
+  → Buyer agent (Claude) chooses tools
+       Seed seller?     checkTrust(sellerId, amount)
+       Unknown company? lookupUnknownMerchant(name, amount, gstin?)
+                        MCA (+ GST legal-name retry) → confidence
+       Product search?  search_catalog
+                        IndiaMART → product integrity → price (soft)
+                        → seller MCA/GST/trust → user policy
+                        → ShoppingAgent ranks CAPTURE-first
+  → evaluateTrust (first-match rules) → applyUserPolicy (downgrade only)
+  → authorizeOrCapture only if the server gate agrees
+  → Explanation + audit log
 ```
 
-Statuses: `authorized` (auto-purchase CAPTURE) | `requires_confirmation` (cheapest HOLD, no auto-pay) | `no_viable` | `no_suppliers`.
+The UI posts to `POST /api/purchase`. It does not score sellers or call Razorpay itself.
 
-Needs `APIFY_TOKEN`. Default actor: `sourabhbgp~indiamart-scraper`. Without a token, external search returns an honest empty result (no invented suppliers).
+### Decision pipeline
 
-### GST verification
+1. **`scoreSeller`** — pure function, 0–100. Recent dispute periods weigh more than early ones. Empty history is *unknown* (not a perfect score). Tiers: high ≥ 75, medium ≥ 45, else low.
+2. **Confidence** (live merchants only) — MCA Company Master Data. High / medium / low / adverse. Independent of risk.
+3. **GST overlay** — identity bridge, not a substitute for MCA. Active GST on an MCA miss stays **low-band** (₹200 trial hold). Cancelled/suspended GST is adverse (refuse). Active GST cannot clear MCA dormant / elevated risk.
+4. **`evaluateTrust`** — first matching rule wins, for example:
+   - Adverse / elevated registry → **refuse**
+   - Low confidence → **hold**, cap ₹200
+   - Seed low-tier with no live confidence → **refuse** (spend limit 0)
+   - Amount over trust spend limit → **hold** at the cap
+   - High MCA + only missing history → often **capture** (registry floor)
+   - Medium effective tier → **hold**
+   - High effective tier → **capture**
+5. **`applyUserPolicy`** — can only **downgrade** (capture → hold → refuse). Never turns a refusal into a payment.
+6. **`assertPaymentAuthorized`** — server gate. The model must already have a stored decision for **this** `sellerId`, the tool `action` must match TrustGate (`capture` cannot override `hold`), and catalog `requires_confirmation` cannot auto-pay catalog sellers. Leftover catalog status does not block a seed or independent live-lookup payment in the same request.
 
-When a **GSTIN** is available (from catalog or tool input), TrustGate:
+When raw risk and effective score differ (common for live MCA merchants with no purchase history), the UI and audit log show both: `Raw 40 (low) → 75 (high)`.
 
-1. Validates format + checksum
-2. Best-effort taxpayer lookup (optional `GST_VERIFY_URL` proxy — official portal often blocks servers)
-3. On MCA trade-name miss + GST legal name → retries MCA with the legal name
-4. Soft overlays Active / Cancelled onto confidence — **not** shopping-side trust
+### What each outcome does
 
-IndiaMART search rows often lack a GSTIN; the bridge only runs when one is present. Format-only checks still audit as `[gst]` when the portal is unavailable.
+| Outcome | Razorpay |
+|---------|----------|
+| **Capture** | Authorize and take the money |
+| **Hold** (seed / live-lookup) | Authorize only |
+| **Hold** (catalog `requires_confirmation`) | **No** payment in this request — ask the user first |
+| **Refuse** | No Razorpay call |
+| Kill switch / payment-gate reject | No Razorpay call |
 
-## User policy
+If a Razorpay call times out or errors: retry once (~8s), then mark the case **flagged / unresolved** in the audit log instead of crashing or silently succeeding.
 
-`src/lib/config/userPolicy.ts` (visible constant, editable in principle):
+### Three entry paths
 
-- `max_spend_per_transaction`: ₹5000
-- `max_spend_per_seller`: ₹10000
-- `confirm_above_amount`: ₹300 (hold even if trust says capture)
-- `hold_expiry_seconds`: 3600
+**Seed catalog** (`data/sellers.json`, eight merchants including adversarial **DealDash Express**). Agent calls `checkTrust`. No MCA. No GST.
+
+**Live MCA** — company not in the seed file. Exact name + legal-form retries, then **fuzzy** normalized variants with a similarity gate (fail closed below 0.72). Weak hits are rejected. If MCA misses and a GSTIN is present, TrustGate validates GST and may retry MCA with the GST legal name.
+
+**Catalog / ShoppingAgent** — product outside seed listings. IndiaMART via Apify. Proposals are untrusted:
+
+1. **Product integrity** — listing must match the request (accessories for a primary good → refuse)
+2. **Price integrity** — soft peer signal only; never a standalone refuse. Needs ≥5 priced matches in **this batch**; with today’s shortlist of 3 the check is usually skipped and audited
+3. Seller MCA/GST/trust + user policy
+4. Rank: cheapest **CAPTURE** → `authorized` (may auto-pay); else cheapest **HOLD** → `requires_confirmation`; else `no_viable`
+
+A `[warning]` banner appears when shopping looks unreliable. TrustGate still decides; shopping does not.
+
+---
 
 ## API
 
+Locally these are open. On Vercel production/preview, unlock in the UI or send `x-trustgate-secret`.
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/sellers` | GET | Public catalog (no scores). `?dev=1` includes scores/tiers |
-| `/api/evaluate` | POST | `{ sellerId, amount, executePayment? }` — deterministic trust + policy |
-| `/api/purchase` | POST | `{ message }` — goal-based buyer agent |
-| `/api/audit-log` | GET | Timestamped trust, policy, payment, and refusal events |
+| `/api/auth` | GET / POST | Control-plane mode (`open` / `password` / `locked`) and password unlock |
+| `/api/sellers` | GET | Catalog (scores only with `?dev=1`); includes `paymentsKilled` |
+| `/api/purchase` | POST | `{ message, userPolicy? }` — buyer agent |
+| `/api/evaluate` | POST | `{ sellerId, amount, executePayment? }` — seed only, no agent |
+| `/api/config` | GET / PUT / DELETE | Read / set / reset runtime policy |
+| `/api/kill-switch` | GET / PUT | `{ killed: boolean }` |
+| `/api/audit-log` | GET / DELETE | Audit entries; DELETE clears memory + file |
 
 ```bash
 curl -X POST http://localhost:3000/api/purchase \
@@ -114,24 +191,33 @@ curl -X POST http://localhost:3000/api/purchase \
   -d '{"message":"Pay Infosys Limited ₹250 for consulting"}'
 ```
 
-Deterministic evaluate (bypasses the agent; seed sellers only):
+Deterministic seed evaluate (bypasses the agent):
 
 ```bash
 curl -X POST http://localhost:3000/api/evaluate \
   -H 'Content-Type: application/json' \
-  -d '{"sellerId":"seller-002","amount":500,"executePayment":true}'
+  -d '{"sellerId":"seller-002","amount":450,"executePayment":true}'
 ```
 
-On a public deployment set `TRUSTGATE_CONTROL_SECRET` and either unlock in the UI or pass `-H 'x-trustgate-secret: …'`. Without that secret, Vercel production/preview APIs stay locked.
+Public deploy:
+
+```bash
+curl -X POST https://YOUR_DEPLOYMENT/api/purchase \
+  -H 'Content-Type: application/json' \
+  -H 'x-trustgate-secret: YOUR_SECRET' \
+  -d '{"message":"Get me a coffee tasting, around ₹450"}'
+```
+
+---
 
 ## Scripts
 
 - `npm run dev` — Next.js App Router
-- `npm run test` — Vitest (trust, confidence, MCA, GST, catalog, policy, Razorpay retry)
+- `npm run test` — Vitest
 - `npm run build` — production build
 
 ## Repo
 
 - GitHub: https://github.com/Ishan-Malhotra/trustgate
-- Phase log: [logs.md](./logs.md)
-- Demo prep / codebase notes: [PREP.md](./PREP.md)
+- Demo prep / file map: [PREP.md](./PREP.md)
+- Build phase log: [logs.md](./logs.md)
