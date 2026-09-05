@@ -2,25 +2,23 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { runBuyerAgent } from "@/lib/agent/buyerAgent";
 import { setUserPolicy } from "@/lib/config/runtimePolicy";
+import { userPolicySchema } from "@/lib/config/policySchema";
 import {
   isPaymentsKilled,
   KILL_SWITCH_MESSAGE,
 } from "@/lib/config/killSwitch";
 import { getAuditLog, logAudit } from "@/lib/audit/logger";
-
-const policySchema = z.object({
-  max_spend_per_transaction: z.number().positive(),
-  max_spend_per_seller: z.number().positive(),
-  confirm_above_amount: z.number().positive(),
-  hold_expiry_seconds: z.number().positive(),
-});
+import { denyUnlessControlAccess } from "@/lib/config/controlAuth";
 
 const bodySchema = z.object({
   message: z.string().min(1),
-  userPolicy: policySchema.optional(),
+  userPolicy: userPolicySchema.optional(),
 });
 
 export async function POST(request: Request) {
+  const denied = denyUnlessControlAccess(request);
+  if (denied) return denied;
+
   const body = await request.json();
   const parsed = bodySchema.safeParse(body);
 

@@ -57,4 +57,8 @@ export function getAuditLog(): AuditEntry[] {
 
 export function clearAuditLog(): void {
   globalForAudit.auditLog = [];
+  void fs.mkdir(path.dirname(LOG_FILE), { recursive: true }).then(() =>
+    fs.writeFile(LOG_FILE, "[]\n")
+  );
 }
+

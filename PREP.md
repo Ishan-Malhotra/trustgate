@@ -168,9 +168,10 @@ Output score 0–100 → tier:
 - **medium** ≥ 45
 - **low** below 45
 
-Spend limits (`getSpendLimit.ts`):
-- Seed / no confidence: low tier → refuse (`0`); medium → capped; high → ₹1500 / ₹3000 / unlimited at 85+
+Spend limits (`getSpendLimit.ts` + `trustSpendLimits.ts`) — **engine constants**, not user settings:
+- Seed / no confidence: low tier → refuse (`0`); medium → capped formula; high → ₹1500 / ₹3000 / unlimited at 85+
 - With live confidence: low confidence → ₹200 trial cap; medium confidence caps tighter; high confidence + history-only gap uses normal high-tier limits
+- Visible read-only under **Dev mode** on the User Policy panel (inspection, not editing)
 
 ---
 
@@ -222,7 +223,7 @@ Then **user policy** runs as a second gate.
 
 ## User policy (second gate)
 
-Defaults in `src/lib/config/userPolicy.ts`:
+Defaults in `src/lib/config/userPolicy.ts` — these are the **only** spend rules the demo UI edits:
 
 | Rule | Default | Effect |
 |------|---------|--------|
@@ -230,6 +231,8 @@ Defaults in `src/lib/config/userPolicy.ts`:
 | `max_spend_per_seller` | ₹10000 | Hard refuse above this |
 | `confirm_above_amount` | ₹300 | Capture becomes **hold** even if trust said capture |
 | `hold_expiry_seconds` | 3600 | Documented hold window (demo doesn’t build a full confirm UI) |
+
+Trust spend ceilings (`TRUST_SPEND_LIMITS` in `src/lib/trust/trustSpendLimits.ts`) stay engine constants. **Dev mode** on the User Policy panel reveals them read-only (formula + caps) for transparency — same idea as score reveal: inspect, don’t casually tamper.
 
 `applyUserPolicy()` (`src/lib/policy/applyUserPolicy.ts`) can only **downgrade** (capture → hold → refuse). It never upgrades a trust refusal into a payment.
 
@@ -448,7 +451,7 @@ Types you’ll see: `agent`, `trust_check`, `policy_check`, `payment`, `refusal`
 
 UI: `AuditLogPanel` — live feed; reasoning / `[live-lookup]` / `[search_catalog]` / `[product]` / `[price]` / `[warning]` / `[kill-switch]` / `[gst]` highlighted. Payment-tool blocks show up as refusals tagged `[payment-gate]`.
 
-API: `GET /api/audit-log`.
+API: `GET /api/audit-log`, `DELETE /api/audit-log` (Clear button in the panel).
 
 ---
 
@@ -459,11 +462,10 @@ API: `GET /api/audit-log`.
 | Panel | Role |
 |-------|------|
 | Unlock (public deploy only) | ControlGate password screen when `TRUSTGATE_CONTROL_SECRET` is set |
-| Header | Kill switch (**Stop all payments** / **Resume**) + payments status |
+| Header | Tagline + status (`Agent connected • Payment gate active • ● Protected`); kill switch button |
 | Chat | Goals + quick demos; comparison after evaluation; TrustGate intervening banner when shopping is unreliable |
-| User Policy | Editable numbers; apply on next purchase |
-| Available Sellers | Public catalog; scores reveal only for sellers checked in that request (or Dev mode) |
-| Audit Log | Full trail |
+| User Policy | Editable spending rules; **Dev mode** reveals read-only trust engine spend constants |
+| Audit Log | Full trail + **Clear** — fills the right column under policy |
 
 Quick demos (chat buttons):
 1. Cheapest banana bread — cheap weak seller vs safer bakery
@@ -485,7 +487,7 @@ Quick demos (chat buttons):
 | `/api/evaluate` | POST | Deterministic seed evaluate |
 | `/api/config` | GET / PUT / DELETE | Read / set / reset runtime policy |
 | `/api/kill-switch` | GET / PUT | Read / set `{ killed: boolean }` |
-| `/api/audit-log` | GET | Audit entries |
+| `/api/audit-log` | GET / DELETE | Audit entries; DELETE clears in-memory + file |
 
 Locally these APIs are open. On Vercel production/preview they need the control cookie or `x-trustgate-secret`.
 

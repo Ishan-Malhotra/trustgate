@@ -2,12 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatPanel } from "@/components/ChatPanel";
-import { SellerPanel } from "@/components/SellerPanel";
 import { PolicyPanel } from "@/components/PolicyPanel";
 import { AuditLogPanel } from "@/components/AuditLogPanel";
-import type { AuditEntry, SellerTrustCheck, UserPolicy } from "@/lib/types";
+import { ControlGate } from "@/components/ControlGate";
+import type { AuditEntry, UserPolicy } from "@/lib/types";
 import type {
-  CatalogSeller,
   ChatMessage,
   PurchaseResponse,
   SellersResponse,
@@ -31,15 +30,9 @@ async function persistPolicy(policy: UserPolicy): Promise<UserPolicy> {
 }
 
 export function TrustGateApp() {
-  const [sellers, setSellers] = useState<CatalogSeller[]>([]);
   const [userPolicy, setUserPolicy] = useState<UserPolicy>(USER_POLICY);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
-  const [revealedById, setRevealedById] = useState<
-    Record<string, SellerTrustCheck>
-  >({});
-  const [chosenSellerId, setChosenSellerId] = useState<string>();
-  const [devMode, setDevMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingLabel, setLoadingLabel] = useState(
     "Comparing relevant sellers…"
@@ -47,25 +40,25 @@ export function TrustGateApp() {
   const [progressEntries, setProgressEntries] = useState<AuditEntry[]>([]);
   const progressBaselineRef = useRef(0);
   const [logLoading, setLogLoading] = useState(false);
+  const [logClearing, setLogClearing] = useState(false);
   const [llmConfigured, setLlmConfigured] = useState(false);
-  const [razorpayConfigured, setRazorpayConfigured] = useState(false);
   const [paymentsKilled, setPaymentsKilled] = useState(false);
   const [bootError, setBootError] = useState<string>();
   const [killSwitchBusy, setKillSwitchBusy] = useState(false);
+  const [controlMode, setControlMode] = useState<
+    "checking" | "open" | "password" | "locked"
+  >("checking");
+  const [unlocked, setUnlocked] = useState(false);
 
-  const fetchSellers = useCallback(
-    async (showScores: boolean, options?: { syncPolicy?: boolean }) => {
-      const res = await fetch(
-        showScores ? "/api/sellers?dev=1" : "/api/sellers"
-      );
-      if (!res.ok) throw new Error("Failed to load sellers");
+  const fetchBootConfig = useCallback(
+    async (options?: { syncPolicy?: boolean }) => {
+      const res = await fetch("/api/sellers");
+      if (!res.ok) throw new Error("Failed to load app config");
       const data: SellersResponse = await res.json();
-      setSellers(data.sellers);
       if (options?.syncPolicy) {
         setUserPolicy(data.userPolicy);
       }
       setLlmConfigured(Boolean(data.llmConfigured));
-      setRazorpayConfigured(Boolean(data.razorpayConfigured));
       setPaymentsKilled(Boolean(data.paymentsKilled));
     },
     []
@@ -82,6 +75,23 @@ export function TrustGateApp() {
       return entries;
     } finally {
       if (!options?.silent) setLogLoading(false);
+    }
+  }, []);
+
+  const handleClearAuditLog = useCallback(async () => {
+    setLogClearing(true);
+    try {
+      const res = await fetch("/api/audit-log", { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to clear audit log");
+      setAuditLog([]);
+      setProgressEntries([]);
+      progressBaselineRef.current = 0;
+    } catch (err) {
+      setBootError(
+        err instanceof Error ? err.message : "Failed to clear audit log"
+      );
+    } finally {
+      setLogClearing(false);
     }
   }, []);
 
@@ -105,19 +115,41 @@ export function TrustGateApp() {
   }, [loading, fetchAuditLog]);
 
   useEffect(() => {
-    fetchSellers(false, { syncPolicy: true }).catch((err) =>
+    let cancelled = false;
+    const loadControl = async () => {
+      try {
+        const res = await fetch("/api/auth");
+        const data = await res.json();
+        if (cancelled) return;
+        const mode =
+          data.mode === "password" || data.mode === "locked"
+            ? data.mode
+            : "open";
+        setControlMode(mode);
+        if (mode === "open" || data.unlocked) {
+          setUnlocked(true);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setBootError(
+            err instanceof Error ? err.message : "Failed to check access"
+          );
+        }
+      }
+    };
+    void loadControl();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!unlocked) return;
+    fetchBootConfig({ syncPolicy: true }).catch((err) =>
       setBootError(err instanceof Error ? err.message : "Boot failed")
     );
     fetchAuditLog();
-  }, [fetchSellers, fetchAuditLog]);
-
-  const handleToggleDevMode = () => {
-    const next = !devMode;
-    setDevMode(next);
-    void fetchSellers(next).catch((err) =>
-      setBootError(err instanceof Error ? err.message : "Failed to reload sellers")
-    );
-  };
+  }, [unlocked, fetchBootConfig, fetchAuditLog]);
 
   const handlePolicyChange = (policy: UserPolicy) => {
     setUserPolicy(policy);
@@ -213,13 +245,6 @@ export function TrustGateApp() {
         "Request processed.";
       if (agentResult.auditLog) setAuditLog(agentResult.auditLog);
 
-      const nextRevealed: Record<string, SellerTrustCheck> = {};
-      for (const check of evaluatedSellers) {
-        nextRevealed[check.sellerId] = check;
-      }
-      setRevealedById(nextRevealed);
-      setChosenSellerId(nextChosen);
-
       setMessages((prev) => [
         ...prev,
         {
@@ -258,6 +283,26 @@ export function TrustGateApp() {
     );
   }
 
+  if (controlMode === "checking") {
+    return (
+      <div className="flex flex-1 items-center justify-center p-8 text-zinc-500">
+        Checking access…
+      </div>
+    );
+  }
+
+  if (controlMode === "locked" || (controlMode === "password" && !unlocked)) {
+    return (
+      <ControlGate
+        mode={controlMode === "locked" ? "locked" : "password"}
+        onUnlocked={() => {
+          setUnlocked(true);
+          setControlMode("password");
+        }}
+      />
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 lg:p-6">
       <header className="shrink-0">
@@ -267,36 +312,46 @@ export function TrustGateApp() {
               TrustGate
             </h1>
             <p className="text-sm text-zinc-500">
-              AI buyer-agent — trust score + user policy before payment
+              Authorization layer for autonomous commerce.
             </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              Agent:{" "}
+            <p
+              className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-zinc-400"
+              aria-live="polite"
+            >
               <span
                 className={
-                  llmConfigured ? "text-emerald-400" : "text-amber-400"
+                  llmConfigured ? "text-zinc-400" : "text-amber-400"
                 }
               >
-                {llmConfigured
-                  ? "Anthropic ready"
-                  : "missing ANTHROPIC_API_KEY"}
+                {llmConfigured ? "Agent connected" : "Agent offline"}
               </span>
-              {" · "}
-              Razorpay:{" "}
+              <span className="text-zinc-600" aria-hidden="true">
+                •
+              </span>
               <span
                 className={
-                  razorpayConfigured ? "text-emerald-400" : "text-zinc-500"
+                  paymentsKilled ? "text-red-400" : "text-zinc-400"
                 }
               >
-                {razorpayConfigured ? "test keys loaded" : "mock mode"}
+                {paymentsKilled
+                  ? "Payment gate halted"
+                  : "Payment gate active"}
               </span>
-              {" · "}
-              Payments:{" "}
+              <span className="text-zinc-600" aria-hidden="true">
+                •
+              </span>
               <span
-                className={
+                className={`inline-flex items-center gap-1.5 ${
                   paymentsKilled ? "text-red-400" : "text-emerald-400"
-                }
+                }`}
               >
-                {paymentsKilled ? "KILL SWITCH ON" : "enabled"}
+                <span
+                  className={`inline-block h-1.5 w-1.5 rounded-full ${
+                    paymentsKilled ? "bg-red-400" : "bg-emerald-400"
+                  }`}
+                  aria-hidden="true"
+                />
+                {paymentsKilled ? "Unprotected" : "Protected"}
               </span>
             </p>
           </div>
@@ -349,16 +404,12 @@ export function TrustGateApp() {
             onPolicyChange={handlePolicyChange}
             onReset={handlePolicyReset}
           />
-          <div className="max-h-44 shrink-0 overflow-y-auto">
-            <SellerPanel
-              sellers={sellers}
-              revealedById={revealedById}
-              chosenSellerId={chosenSellerId}
-              devMode={devMode}
-              onToggleDevMode={handleToggleDevMode}
-            />
-          </div>
-          <AuditLogPanel entries={auditLog} loading={logLoading} />
+          <AuditLogPanel
+            entries={auditLog}
+            loading={logLoading}
+            clearing={logClearing}
+            onClear={() => void handleClearAuditLog()}
+          />
         </div>
       </div>
     </div>

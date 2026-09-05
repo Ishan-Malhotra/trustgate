@@ -6,8 +6,12 @@ import { getUserPolicy } from "@/lib/config/runtimePolicy";
 import { isLlmConfigured, getAnthropicWorkspaceId } from "@/lib/config/env";
 import { isRazorpayConfigured } from "@/lib/razorpay/client";
 import { isPaymentsKilled } from "@/lib/config/killSwitch";
+import { denyUnlessControlAccess } from "@/lib/config/controlAuth";
 
 export async function GET(request: Request) {
+  const denied = denyUnlessControlAccess(request);
+  if (denied) return denied;
+
   const { searchParams } = new URL(request.url);
   const includeScores = searchParams.get("dev") === "1";
 

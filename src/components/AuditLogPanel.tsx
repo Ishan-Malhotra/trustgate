@@ -6,6 +6,8 @@ import type { AuditEntry } from "@/lib/types";
 interface AuditLogPanelProps {
   entries: AuditEntry[];
   loading?: boolean;
+  clearing?: boolean;
+  onClear?: () => void;
 }
 
 const TYPE_STYLES: Record<AuditEntry["type"], string> = {
@@ -27,7 +29,12 @@ function formatTime(iso: string): string {
   });
 }
 
-export function AuditLogPanel({ entries, loading }: AuditLogPanelProps) {
+export function AuditLogPanel({
+  entries,
+  loading,
+  clearing,
+  onClear,
+}: AuditLogPanelProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,13 +43,28 @@ export function AuditLogPanel({ entries, loading }: AuditLogPanelProps) {
 
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
           Audit Log
         </h2>
-        {loading && (
-          <span className="text-xs text-zinc-500 animate-pulse">Updating…</span>
-        )}
+        <div className="flex items-center gap-2">
+          {loading && (
+            <span className="text-xs text-zinc-500 animate-pulse">
+              Updating…
+            </span>
+          )}
+          {onClear && (
+            <button
+              type="button"
+              onClick={onClear}
+              disabled={clearing || entries.length === 0}
+              aria-label="Clear audit log"
+              className="rounded border border-zinc-700 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {clearing ? "Clearing…" : "Clear"}
+            </button>
+          )}
+        </div>
       </div>
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto font-mono text-xs">
         {entries.length === 0 ? (

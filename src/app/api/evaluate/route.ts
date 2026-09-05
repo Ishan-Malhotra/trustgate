@@ -7,6 +7,7 @@ import { getUserPolicy } from "@/lib/config/runtimePolicy";
 import { generateExplanation } from "@/lib/explanation/generateExplanation";
 import { logAudit, getAuditLog } from "@/lib/audit/logger";
 import { executeApprovedPayment } from "@/lib/razorpay/executePayment";
+import { denyUnlessControlAccess } from "@/lib/config/controlAuth";
 
 const bodySchema = z.object({
   sellerId: z.string(),
@@ -15,6 +16,9 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const denied = denyUnlessControlAccess(request);
+  if (denied) return denied;
+
   const body = await request.json();
   const parsed = bodySchema.safeParse(body);
 

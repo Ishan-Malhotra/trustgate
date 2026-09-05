@@ -20,6 +20,7 @@ cp .env.example .env.local
 # Recommended: DATA_GOV_IN_API_KEY (MCA live lookup — public sample key rate-limits)
 # Optional catalog: APIFY_TOKEN (+ optional APIFY_INDIAMART_ACTOR_ID)
 # Optional GST proxy: GST_VERIFY_URL (portal is often blocked from servers)
+# Public deploy: TRUSTGATE_CONTROL_SECRET (required on Vercel production/preview)
 npm run dev
 ```
 
@@ -120,6 +121,8 @@ curl -X POST http://localhost:3000/api/evaluate \
   -H 'Content-Type: application/json' \
   -d '{"sellerId":"seller-002","amount":500,"executePayment":true}'
 ```
+
+On a public deployment set `TRUSTGATE_CONTROL_SECRET` and either unlock in the UI or pass `-H 'x-trustgate-secret: …'`. Without that secret, Vercel production/preview APIs stay locked.
 
 ## Scripts
 

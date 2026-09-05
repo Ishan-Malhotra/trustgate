@@ -1,3 +1,4 @@
+import type { CatalogSearchStatus } from "@/lib/catalog/types"
 import type { FinalDecision, Seller, SellerTrustCheck } from "@/lib/types"
 import type { PaymentExecutionResult } from "@/lib/razorpay/executePayment"
 
@@ -11,6 +12,9 @@ export interface AgentContext {
   liveMerchants: Record<string, Seller>
   /** Accumulated shopping integrity failures this request (TrustGate reliability). */
   shoppingIntegrityFailureCount?: number
+  /** Last catalog shopping status in this request — enforced by authorizeOrCapture. */
+  lastShoppingStatus?: CatalogSearchStatus
+  lastShoppingChosenSellerId?: string
 }
 
 export function storeTrustDecision(

@@ -1,25 +1,25 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import {
   getUserPolicy,
   resetUserPolicy,
   setUserPolicy,
 } from "@/lib/config/runtimePolicy";
+import { userPolicySchema } from "@/lib/config/policySchema";
+import { denyUnlessControlAccess } from "@/lib/config/controlAuth";
 
-const policySchema = z.object({
-  max_spend_per_transaction: z.number().positive(),
-  max_spend_per_seller: z.number().positive(),
-  confirm_above_amount: z.number().positive(),
-  hold_expiry_seconds: z.number().positive(),
-});
+export async function GET(request: Request) {
+  const denied = denyUnlessControlAccess(request);
+  if (denied) return denied;
 
-export async function GET() {
   return NextResponse.json({ userPolicy: getUserPolicy() });
 }
 
 export async function PUT(request: Request) {
+  const denied = denyUnlessControlAccess(request);
+  if (denied) return denied;
+
   const body = await request.json();
-  const parsed = policySchema.safeParse(body);
+  const parsed = userPolicySchema.safeParse(body);
 
   if (!parsed.success) {
     return NextResponse.json(
@@ -32,7 +32,10 @@ export async function PUT(request: Request) {
   return NextResponse.json({ userPolicy });
 }
 
-export async function DELETE() {
+export async function DELETE(request: Request) {
+  const denied = denyUnlessControlAccess(request);
+  if (denied) return denied;
+
   const userPolicy = resetUserPolicy();
   return NextResponse.json({ userPolicy });
 }

@@ -2,14 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { search_catalog } from "@/lib/catalog/searchCatalog"
 import type { CatalogCandidate } from "@/lib/catalog/types"
 import type { AgentContext } from "@/lib/agent/context"
-import type { UserPolicy } from "@/lib/types"
+import { USER_POLICY } from "@/lib/config/userPolicy"
 
-const userPolicy: UserPolicy = {
-  max_spend_per_transaction: 5000,
-  max_spend_per_seller: 10000,
-  confirm_above_amount: 300,
-  hold_expiry_seconds: 3600,
-}
+const userPolicy = USER_POLICY
 
 vi.mock("@/lib/catalog/providers/indiamart", () => ({
   searchIndiamart: vi.fn(),

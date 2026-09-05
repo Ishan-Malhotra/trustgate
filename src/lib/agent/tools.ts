@@ -9,6 +9,7 @@ import type { UserPolicy } from "@/lib/types"
 import { getUserPolicy } from "@/lib/config/runtimePolicy"
 import { runLookupUnknownMerchant } from "@/lib/agent/lookupUnknownMerchant"
 import { runShoppingAgent } from "@/lib/agent/shoppingAgent"
+import { assertPaymentAuthorized } from "@/lib/agent/assertPaymentAuthorized"
 import { assertPaymentsAllowed } from "@/lib/config/killSwitch"
 import {
   storeTrustDecision,
@@ -114,7 +115,7 @@ export function createBuyerTools(
 
   const authorizeOrCapture = tool({
     description:
-      "Authorize or capture payment for a seller. Only call AFTER checkTrust, lookupUnknownMerchant, or search_catalog with status authorized. Never call automatically for catalog status requires_confirmation. Never exceed spend limit.",
+      "Authorize or capture payment for a seller. Only call AFTER checkTrust, lookupUnknownMerchant, or search_catalog with status authorized. Action MUST match the stored TrustGate decision for that sellerId (capture cannot override hold). Never call for catalog status requires_confirmation. Never exceed spend limit.",
     inputSchema: z.object({
       sellerId: z.string(),
       amount: z.number().positive(),
@@ -136,37 +137,37 @@ export function createBuyerTools(
         return { error: `Seller not found: ${sellerId}` }
       }
 
-      const decision = ctx.decisionsBySellerId[sellerId] ?? ctx.lastDecision
-      if (!decision || decision.tier === undefined) {
-        logAudit("error", "authorizeOrCapture called without prior checkTrust")
-        return { error: "Must call checkTrust before payment" }
+      const decision = ctx.decisionsBySellerId[sellerId]
+      const gate = assertPaymentAuthorized({
+        sellerId,
+        amount,
+        action,
+        decision,
+        shoppingStatus: ctx.lastShoppingStatus,
+        shoppingChosenSellerId: ctx.lastShoppingChosenSellerId,
+      })
+      if (!gate.ok) {
+        logAudit("refusal", `[payment-gate] ${gate.error}`, {
+          sellerId,
+          amount,
+          action,
+          storedAction: decision?.action,
+          shoppingStatus: ctx.lastShoppingStatus,
+        })
+        return { error: gate.error }
+      }
+
+      if (!decision) {
+        return { error: "Must check trust for this seller before payment" }
       }
 
       ctx.lastDecision = decision
       ctx.chosenSellerId = sellerId
-      const payAmount = decision.effectiveAmount
-
-      if (decision.spendLimit !== null && amount > decision.spendLimit) {
-        logAudit("refusal", `Blocked: amount exceeds spend limit`, {
-          sellerId,
-          amount,
-          spendLimit: decision.spendLimit,
-        })
-        return { error: `Amount exceeds spend limit of ₹${decision.spendLimit}` }
-      }
-
-      if (decision.action === "refuse") {
-        logAudit("refusal", `Blocked: trust/policy refused payment`, {
-          sellerId,
-          amount,
-        })
-        return { error: "Payment refused by trust/policy gates" }
-      }
 
       const payment = await executeApprovedPayment({
         sellerId,
         sellerName: seller.name,
-        amount: payAmount,
+        amount: gate.payAmount,
         action,
       })
       ctx.lastPayment = payment

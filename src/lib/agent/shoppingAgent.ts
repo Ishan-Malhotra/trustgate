@@ -7,6 +7,7 @@ import type {
 } from "@/lib/catalog/types"
 import type { AgentContext } from "@/lib/agent/context"
 import { logAudit } from "@/lib/audit/logger"
+import { sanitizeUntrustedText } from "@/lib/security/sanitizeUntrustedText"
 import type { UserPolicy } from "@/lib/types"
 
 export interface ShoppingAgentInput {
@@ -43,7 +44,9 @@ export async function runShoppingAgent(
   logAudit("agent", `[shopping] ${summary}`, {
     status: ranked.status,
     chosenSellerId: ranked.chosen?.sellerId,
-    chosenName: ranked.chosen?.candidate.merchantName,
+    chosenName: ranked.chosen
+      ? sanitizeUntrustedText(ranked.chosen.candidate.merchantName)
+      : undefined,
     action: ranked.chosen?.recommendedAction,
     reliability: ranked.shoppingReliability?.level,
   })
@@ -74,6 +77,7 @@ export function applyShoppingDecision(
     const summary =
       evaluation.summary ??
       `No suppliers found in the catalog for "${query}".`
+    persistShoppingGate(ctx, "no_suppliers")
     return {
       status: "no_suppliers",
       query,
@@ -99,7 +103,7 @@ export function applyShoppingDecision(
 
   const cheapestCapture = pickCheapestByPrice(approved)
   if (cheapestCapture) {
-    if (ctx) ctx.chosenSellerId = cheapestCapture.sellerId
+    persistShoppingGate(ctx, "authorized", cheapestCapture.sellerId)
     const summary = buildAuthorizedSummary(
       query,
       cheapestCapture,
@@ -127,7 +131,7 @@ export function applyShoppingDecision(
 
   const cheapestHold = pickCheapestByPrice(holds)
   if (cheapestHold) {
-    if (ctx) ctx.chosenSellerId = cheapestHold.sellerId
+    persistShoppingGate(ctx, "requires_confirmation", cheapestHold.sellerId)
     const summary = buildRequiresConfirmationSummary(
       query,
       cheapestHold,
@@ -152,6 +156,7 @@ export function applyShoppingDecision(
     }
   }
 
+  persistShoppingGate(ctx, "no_viable")
   const summary = buildNoViableSummary(query, candidates, budgetNote)
   return {
     status: "no_viable",
@@ -164,8 +169,23 @@ export function applyShoppingDecision(
     holds: [],
     summary,
     reason: summary,
-      shoppingReliability,
+    shoppingReliability,
   }
+}
+
+function persistShoppingGate(
+  ctx: AgentContext | undefined,
+  status: CatalogSearchStatus,
+  chosenSellerId?: string
+) {
+  if (!ctx) return
+  ctx.lastShoppingStatus = status
+  ctx.lastShoppingChosenSellerId = chosenSellerId
+  if (chosenSellerId) ctx.chosenSellerId = chosenSellerId
+}
+
+function displayName(name: string): string {
+  return sanitizeUntrustedText(name)
 }
 
 function pickCheapestByPrice(
@@ -205,22 +225,22 @@ function buildAuthorizedSummary(
     `Catalog search for "${query}" evaluated ${evaluated.length} candidate(s).`,
     ...evaluated.map(
       (row) =>
-        `- ${row.candidate.merchantName}: listing ₹${row.candidate.amount ?? "n/a"}, TrustGate ${row.recommendedAction} (${actionLabel(row.recommendedAction)})` +
+        `- ${displayName(row.candidate.merchantName)}: listing ₹${row.candidate.amount ?? "n/a"}, TrustGate ${row.recommendedAction} (${actionLabel(row.recommendedAction)})` +
         (row.trustReason ? `; ${row.trustReason}` : "")
     ),
-    `Chose ${chosen.candidate.merchantName} @ ₹${price} — cheapest seller authorized for automatic purchase (CAPTURE).` +
+    `Chose ${displayName(chosen.candidate.merchantName)} @ ₹${price} — cheapest seller authorized for automatic purchase (CAPTURE).` +
       (chosen.trustReason ? ` ${chosen.trustReason}` : ""),
     `Status: authorized. BuyerAgent may call authorizeOrCapture with action "capture" for this seller only.`,
   ]
 
   if (holds.length > 0) {
     parts.push(
-      `Skipped ${holds.length} HOLD candidate(s) (cheaper HOLD does not beat CAPTURE): ${holds.map((h) => `${h.candidate.merchantName} ₹${h.candidate.amount ?? "n/a"}`).join(", ")}.`
+      `Skipped ${holds.length} HOLD candidate(s) (cheaper HOLD does not beat CAPTURE): ${holds.map((h) => `${displayName(h.candidate.merchantName)} ₹${h.candidate.amount ?? "n/a"}`).join(", ")}.`
     )
   }
   if (refused.length > 0) {
     parts.push(
-      `Filtered ${refused.length} refused candidate(s): ${refused.map((r) => r.candidate.merchantName).join(", ")}.`
+      `Filtered ${refused.length} refused candidate(s): ${refused.map((r) => displayName(r.candidate.merchantName)).join(", ")}.`
     )
   }
   if (approved.length > 1) {
@@ -228,7 +248,7 @@ function buildAuthorizedSummary(
       .filter((row) => row.sellerId !== chosen.sellerId)
       .map(
         (row) =>
-          `${row.candidate.merchantName} ₹${row.candidate.amount ?? "n/a"}`
+          `${displayName(row.candidate.merchantName)} ₹${row.candidate.amount ?? "n/a"}`
       )
     if (others.length > 0) {
       parts.push(`Other CAPTURE options: ${others.join("; ")}.`)
@@ -252,11 +272,11 @@ function buildRequiresConfirmationSummary(
     `Catalog search for "${query}" evaluated ${evaluated.length} candidate(s).`,
     ...evaluated.map(
       (row) =>
-        `- ${row.candidate.merchantName}: listing ₹${row.candidate.amount ?? "n/a"}, TrustGate ${row.recommendedAction} (${actionLabel(row.recommendedAction)})` +
+        `- ${displayName(row.candidate.merchantName)}: listing ₹${row.candidate.amount ?? "n/a"}, TrustGate ${row.recommendedAction} (${actionLabel(row.recommendedAction)})` +
         (row.trustReason ? `; ${row.trustReason}` : "")
     ),
     `No seller was eligible for automatic capture (CAPTURE).`,
-    `Recommended constrained option: ${chosen.candidate.merchantName} @ ₹${price} — cheapest HOLD (bounded hold / requires confirmation).` +
+    `Recommended constrained option: ${displayName(chosen.candidate.merchantName)} @ ₹${price} — cheapest HOLD (bounded hold / requires confirmation).` +
       (chosen.trustReason ? ` TrustGate: ${chosen.trustReason}` : ""),
     `Maximum permitted hold amount for this option: ₹${chosen.amountUsed}.`,
     `Status: requires_confirmation. Do NOT call authorizeOrCapture automatically. This is not a completed purchase and not an automatic capture.`,
@@ -267,7 +287,7 @@ function buildRequiresConfirmationSummary(
       .filter((row) => row.sellerId !== chosen.sellerId)
       .map(
         (row) =>
-          `${row.candidate.merchantName} ₹${row.candidate.amount ?? "n/a"}`
+          `${displayName(row.candidate.merchantName)} ₹${row.candidate.amount ?? "n/a"}`
       )
     if (others.length > 0) {
       parts.push(`Other HOLD options (more expensive): ${others.join("; ")}.`)
@@ -275,7 +295,7 @@ function buildRequiresConfirmationSummary(
   }
   if (refused.length > 0) {
     parts.push(
-      `Filtered ${refused.length} refused candidate(s): ${refused.map((r) => r.candidate.merchantName).join(", ")}.`
+      `Filtered ${refused.length} refused candidate(s): ${refused.map((r) => displayName(r.candidate.merchantName)).join(", ")}.`
     )
   }
   if (budgetNote) parts.push(`(${budgetNote})`)
@@ -290,7 +310,7 @@ function buildNoViableSummary(
 ): string {
   const lines = evaluated.map(
     (row) =>
-      `- ${row.candidate.merchantName} (₹${row.candidate.amount ?? "n/a"}): ${actionLabel(row.recommendedAction)}`
+      `- ${displayName(row.candidate.merchantName)} (₹${row.candidate.amount ?? "n/a"}): ${actionLabel(row.recommendedAction)}`
   )
   const base = `No viable seller found for "${query}" — every candidate was refused.\n${lines.join("\n")}\nStatus: no_viable. Do not call payment tools.`
   return budgetNote ? `${base}\n(${budgetNote})` : base

@@ -1,15 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { runLookupUnknownMerchant } from "@/lib/agent/lookupUnknownMerchant"
 import type { AgentContext } from "@/lib/agent/context"
-import type { UserPolicy } from "@/lib/types"
+import { USER_POLICY } from "@/lib/config/userPolicy"
 import { gstinCheckDigit } from "@/lib/gst/validateGstin"
 
-const userPolicy: UserPolicy = {
-  max_spend_per_transaction: 5000,
-  max_spend_per_seller: 10000,
-  confirm_above_amount: 300,
-  hold_expiry_seconds: 3600,
-}
+const userPolicy = USER_POLICY
 
 vi.mock("@/lib/audit/logger", () => ({
   logAudit: vi.fn(),

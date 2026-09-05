@@ -1,34 +1,53 @@
 import type { TrustScoreResult, TrustTier } from "@/lib/types";
 import type { ConfidenceResult } from "./confidence";
 import { isUnverifiedHistoryOnly } from "./trustSignals";
+import {
+  LIVE_TRIAL_SPEND_LIMIT,
+  TRUST_SPEND_LIMITS,
+} from "./trustSpendLimits";
 
-export const LIVE_TRIAL_SPEND_LIMIT = 200;
-const MEDIUM_CONFIDENCE_CAP = 800;
+export {
+  LIVE_TRIAL_SPEND_LIMIT,
+  TRUST_SPEND_LIMITS,
+  type TrustSpendLimits,
+} from "./trustSpendLimits";
 
 function baseSpendLimit(tier: TrustTier, score: number): number | null {
+  const c = TRUST_SPEND_LIMITS;
   if (tier === "medium") {
-    const mediumBase = 200 + (score - 45) * 15;
-    return Math.max(100, Math.min(800, Math.round(mediumBase)));
+    const mediumBase =
+      c.mediumBase + (score - c.mediumScoreAnchor) * c.mediumPerScorePoint;
+    return Math.max(
+      c.mediumFloor,
+      Math.min(c.mediumCap, Math.round(mediumBase))
+    );
   }
 
-  if (score >= 85) return null;
-  if (score >= 75) return 3000;
-  return 1500;
+  if (score >= c.unlimitedMinScore) return null;
+  if (score >= c.highStrongMinScore) return c.highStrongLimit;
+  return c.highBaseLimit;
 }
 
 function confidenceBackedLowTierLimit(
   score: number,
   band: ConfidenceResult["band"]
 ): number {
+  const c = TRUST_SPEND_LIMITS;
   if (band === "high") {
     const limitScore = Math.max(score, 55);
     return Math.max(
-      100,
-      Math.min(800, Math.round(200 + (limitScore - 45) * 15))
+      c.mediumFloor,
+      Math.min(
+        c.mediumCap,
+        Math.round(
+          c.mediumBase +
+            (limitScore - c.mediumScoreAnchor) * c.mediumPerScorePoint
+        )
+      )
     );
   }
 
-  return MEDIUM_CONFIDENCE_CAP;
+  return c.mediumCap;
 }
 
 /**
@@ -67,8 +86,8 @@ export function getSpendLimit(
   const base = baseSpendLimit(tier, score);
 
   if (confidence.band === "medium") {
-    if (base === null) return MEDIUM_CONFIDENCE_CAP;
-    return Math.min(base, MEDIUM_CONFIDENCE_CAP);
+    if (base === null) return TRUST_SPEND_LIMITS.mediumCap;
+    return Math.min(base, TRUST_SPEND_LIMITS.mediumCap);
   }
 
   return base;

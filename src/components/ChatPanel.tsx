@@ -70,11 +70,6 @@ export function ChatPanel({
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
           Purchase Request
         </h2>
-        <p className="mt-1 text-xs text-zinc-500">
-          Describe a goal, not a seller — e.g. &quot;Get me the best banana bread
-          you can find&quot;. Name a real company outside the catalog for live MCA
-          lookup.
-        </p>
       </div>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">

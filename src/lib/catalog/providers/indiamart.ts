@@ -1,5 +1,6 @@
 import { getApifyToken, getIndiamartActorId } from "@/lib/config/env"
 import { logAudit } from "@/lib/audit/logger"
+import { sanitizeUntrustedText } from "@/lib/security/sanitizeUntrustedText"
 import type { CatalogCandidate } from "@/lib/catalog/types"
 
 /** Apify sync scrapes are slow; 15s was aborting before results arrived. */
@@ -83,8 +84,9 @@ interface IndiamartRawItem {
 }
 
 export function mapIndiamartItem(item: IndiamartRawItem): CatalogCandidate | null {
-  const merchantName =
-    typeof item.companyName === "string" ? item.companyName.trim() : ""
+  const merchantName = sanitizeUntrustedText(
+    typeof item.companyName === "string" ? item.companyName : ""
+  )
   if (!merchantName) return null
 
   const amount =
@@ -93,7 +95,10 @@ export function mapIndiamartItem(item: IndiamartRawItem): CatalogCandidate | nul
     parseIndiamartPrice(item.price)
 
   const cityRaw = item.city ?? item.supplierCity
-  const city = typeof cityRaw === "string" ? cityRaw.trim() || null : null
+  const city =
+    typeof cityRaw === "string"
+      ? sanitizeUntrustedText(cityRaw) || null
+      : null
 
   const sourceUrlCandidate = [
     item.companyUrl,
@@ -115,8 +120,8 @@ export function mapIndiamartItem(item: IndiamartRawItem): CatalogCandidate | nul
     raw.gstNumber = gstin
   }
   const productName =
-    typeof item.productName === "string" && item.productName.trim()
-      ? item.productName.trim()
+    typeof item.productName === "string"
+      ? sanitizeUntrustedText(item.productName) || null
       : null
   if (productName) {
     raw.productName = productName

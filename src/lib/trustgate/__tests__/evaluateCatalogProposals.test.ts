@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { evaluateCatalogProposals } from "@/lib/trustgate/evaluateCatalogProposals"
 import type { CatalogCandidate } from "@/lib/catalog/types"
 import type { AgentContext } from "@/lib/agent/context"
-import type { UserPolicy } from "@/lib/types"
+import { USER_POLICY } from "@/lib/config/userPolicy"
 
 vi.mock("@/lib/agent/lookupUnknownMerchant", () => ({
   runLookupUnknownMerchant: vi.fn(),
@@ -19,12 +19,7 @@ vi.mock("@/lib/razorpay/executePayment", () => ({
 import { runLookupUnknownMerchant } from "@/lib/agent/lookupUnknownMerchant"
 import { executeApprovedPayment } from "@/lib/razorpay/executePayment"
 
-const userPolicy: UserPolicy = {
-  max_spend_per_transaction: 5000,
-  max_spend_per_seller: 10000,
-  confirm_above_amount: 300,
-  hold_expiry_seconds: 3600,
-}
+const userPolicy = USER_POLICY
 
 function makeCtx(): AgentContext {
   return {

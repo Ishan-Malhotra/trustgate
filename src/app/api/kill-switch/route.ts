@@ -4,12 +4,16 @@ import {
   isPaymentsKilled,
   setPaymentsKilled,
 } from "@/lib/config/killSwitch"
+import { denyUnlessControlAccess } from "@/lib/config/controlAuth"
 
 const bodySchema = z.object({
   killed: z.boolean(),
 })
 
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = denyUnlessControlAccess(request)
+  if (denied) return denied
+
   return NextResponse.json({
     paymentsKilled: isPaymentsKilled(),
     paymentsEnabled: !isPaymentsKilled(),
@@ -17,6 +21,9 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  const denied = denyUnlessControlAccess(request)
+  if (denied) return denied
+
   const body = await request.json()
   const parsed = bodySchema.safeParse(body)
 
