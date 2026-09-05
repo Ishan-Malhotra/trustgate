@@ -122,7 +122,7 @@ export function createBuyerTools(
       action: z.enum(["capture", "hold"]),
     }),
     execute: async ({ sellerId, amount, action }) => {
-      const kill = assertPaymentsAllowed()
+      const kill = await assertPaymentsAllowed()
       if (!kill.ok) {
         logAudit("refusal", `[kill-switch] Blocked authorizeOrCapture`, {
           sellerId,

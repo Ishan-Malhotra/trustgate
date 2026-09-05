@@ -222,6 +222,25 @@ export function evaluateTrust(
     );
   }
 
+  if (effectiveTier === "low") {
+    const capped =
+      spendLimit !== null ? Math.min(amount, spendLimit) : amount;
+    return buildDecision(
+      {
+        action: "hold",
+        spendLimit,
+        effectiveAmount: capped,
+        trustReason: `Low trust (score ${effectiveScore}) — authorization held; not eligible for automatic capture`,
+        breakdown,
+        ...confidenceFields,
+      },
+      riskScore,
+      riskTier,
+      effectiveScore,
+      effectiveTier
+    );
+  }
+
   if (effectiveTier === "medium") {
     return buildDecision(
       {

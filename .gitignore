@@ -34,8 +34,9 @@ yarn-error.log*
 .env*
 !.env.example
 
-# audit log (runtime generated)
+# audit log + local kill-switch file (runtime generated)
 data/audit-log.json
+data/kill-switch.json
 
 # vercel
 .vercel

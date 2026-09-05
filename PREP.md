@@ -18,6 +18,7 @@ TrustGate is past the seed-catalog demo. It now:
 6. **Kill switch** — one header button stops all autonomous payments and agent purchase runs instantly
 7. **Control plane** — local demo stays open; Vercel production/preview is locked unless `TRUSTGATE_CONTROL_SECRET` is set
 8. **Fuzzy MCA** — normalized name variants + similarity gate (fail closed below 0.72)
+9. **GST overlay** — Active GST is an MCA bridge, not a substitute. MCA miss + GST Active → trial hold, never capture
 
 **Still next:** magic trade-name → unrelated legal-name without GSTIN / stronger evidence (not inventing matches).
 
@@ -68,7 +69,7 @@ For catalog deals there is an extra TrustGate harness **before** seller trust: p
 | Catalog providers (`search_catalog`) | `src/lib/catalog/` |
 | Proposal integrity + shopping reliability | `src/lib/trustgate/` |
 | GST validation / verify / confidence overlay | `src/lib/gst/` |
-| Kill switch | `src/lib/config/killSwitch.ts` |
+| Kill switch | `src/lib/config/killSwitch.ts`, `killSwitchStore.ts` |
 | Payment tool gate | `src/lib/agent/assertPaymentAuthorized.ts` |
 | Control-plane auth | `src/lib/config/controlAuth.ts`, `src/proxy.ts`, `/api/auth` |
 | Untrusted catalog text | `src/lib/security/sanitizeUntrustedText.ts` |
@@ -88,6 +89,7 @@ Needed env:
 - `APIFY_TOKEN` / `APIFY_INDIAMART_ACTOR_ID` — optional; without token, external catalog search returns no suppliers (honest empty, not invented). Actor ID defaults to `sourabhbgp~indiamart-scraper`
 - `GST_VERIFY_URL` — optional proxy; official GST portal often blocks servers (format/checksum still runs)
 - `TRUSTGATE_CONTROL_SECRET` — optional locally (demo stays open). **Required on Vercel production/preview** or APIs return 503. Unlock once in the UI, or send `x-trustgate-secret`
+- `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` — kill switch shared flag. **Required on Vercel** so Stop all payments applies to every function instance. Local `next dev` falls back to `data/kill-switch.json`
 
 ---
 
@@ -214,6 +216,7 @@ Notable rules:
 - Low confidence → hold, amount capped at ₹200 (“insufficient verifiable history”)
 - Amount over trust spend limit → hold at the cap
 - High confidence + only missing history → registry trust floor (effective score floored to 75 or 55) and often **capture**
+- Low effective tier without that high-registry floor → **hold**, never the default capture (GST or a young MCA hit is not enough to auto-pay)
 - Medium effective tier → hold
 - High effective tier → capture
 
@@ -301,14 +304,17 @@ Files: `src/lib/trustgate/*` (`productIntegrity`, `priceIntegrity`, `shoppingRel
 
 ### Kill switch (demo control)
 
-One header button (**Stop all payments**) engages a server kill switch:
+One header button (**Stop all payments**) engages a **shared** kill switch:
 
 - Stops buyer-agent purchase runs immediately (`/api/purchase`)
 - Blocks `authorizeOrCapture` and `executeApprovedPayment` (₹0 to Razorpay)
 - Audits `[kill-switch]` and tells the user in chat
 - Status line shows **KILL SWITCH ON**; **Resume payments** re-enables
+- Every check **reads the store** (no in-process cache of the flag)
 
-File: `src/lib/config/killSwitch.ts` · API: `GET/PUT /api/kill-switch`
+**Where the flag lives:** Upstash Redis key `trustgate:payments_killed` when `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` are set. That is the Vercel path — Fluid Compute instances do not share `globalThis`. Locally, without Redis, the flag is `data/kill-switch.json` (shared on that machine). A Vercel deploy without Redis logs an error and is **not** cross-instance.
+
+Files: `src/lib/config/killSwitch.ts`, `killSwitchStore.ts` · API: `GET/PUT /api/kill-switch`
 
 ### Control plane (API access)
 
@@ -366,7 +372,7 @@ GST on IndiaMART search rows is often empty. When a **GSTIN is present**, TrustG
 1. Validates format + checksum (`src/lib/gst/validateGstin.ts`)
 2. Tries taxpayer lookup (`verifyGstin` — portal or optional `GST_VERIFY_URL` proxy)
 3. On MCA trade-name miss + GST legal name → **retries MCA** with the legal name
-4. Overlays GST Active / Cancelled onto confidence (`applyGstConfidenceOverlay`) — still not shopping-side trust
+4. Overlays GST onto confidence (`applyGstConfidenceOverlay`) — **not** shopping-side trust and **not** an MCA substitute. Active GST on an MCA miss stays low-band (₹200 trial hold). Cancelled/suspended GST is adverse (refuse). Active GST does not clear MCA dormant / elevated risk. If MCA already landed medium, GST may corroborate the level (still not capture by itself).
 
 Portal lookups are frequently blocked from servers; without `GST_VERIFY_URL` you still get honest format-only `[gst]` audit lines.
 
@@ -573,3 +579,5 @@ PREP.md                    this file — demo prep reference
 | 2026-09-05 | Price anomaly: batch-only peers, min pool 5, soft signal (never standalone refuse); explanation multi-reason ordered list |
 | 2026-09-05 | Payment + control-plane hardening: server `assertPaymentAuthorized`, catalog HOLD cannot auto-pay, no lastDecision fallback, catalog name sanitization, ControlGate / `TRUSTGATE_CONTROL_SECRET` (local open, Vercel fail-closed) |
 | 2026-09-05 | Catalog payment gate scoped to `lastShoppingSellerIds` — leftover `authorized` status no longer blocks seed / live-lookup sellers |
+| 2026-09-05 | GST overlay cannot invent capture: Active GST on MCA miss stays low-band; low effective tier without high-registry floor holds |
+| 2026-09-05 | Kill switch is shared state (Upstash Redis / local file), not `globalThis` — every payment path re-reads the store |

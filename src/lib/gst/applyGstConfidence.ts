@@ -3,7 +3,9 @@ import type { GstTaxpayerRecord } from "@/lib/gst/verifyGstin"
 
 /**
  * Overlay GST identity signals onto MCA-derived confidence.
- * Does not invent trust scores — only adjusts confidence band/reasons.
+ * Does not invent trust — GST never substitutes for an MCA hit.
+ * Active GST on an MCA miss stays low-band (trial hold), not medium (which
+ * used to fall through to capture in evaluateTrust).
  */
 export function applyGstConfidenceOverlay(
   base: ConfidenceResult,
@@ -56,16 +58,20 @@ export function applyGstConfidenceOverlay(
     reasons.push(
       `GST Active: ${gst.legalName}${gst.tradeName ? ` (trade: ${gst.tradeName})` : ""}`
     )
-    if (!base.adverseStatus && base.band === "low") {
+    // Cancelled GST already returned. Do not let Active GST wash MCA
+    // dormant / not-Active elevated risk, or invent a medium band from a miss.
+    if (base.adverseStatus || base.elevatedRisk) {
+      return { ...base, reasons }
+    }
+    if (base.band === "low") {
       return {
-        level: Math.max(base.level, 45),
-        band: "medium",
+        ...base,
+        level: Math.max(base.level, 30),
+        band: "low",
         reasons,
-        adverseStatus: false,
-        elevatedRisk: false,
       }
     }
-    if (!base.adverseStatus && base.band === "medium") {
+    if (base.band === "medium") {
       return {
         ...base,
         level: Math.max(base.level, 55),

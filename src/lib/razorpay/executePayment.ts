@@ -34,7 +34,7 @@ export async function executeApprovedPayment(input: {
 }): Promise<PaymentExecutionResult> {
   const { sellerId, sellerName, amount, action } = input;
 
-  const kill = assertPaymentsAllowed();
+  const kill = await assertPaymentsAllowed();
   if (!kill.ok) {
     logAudit("refusal", `[kill-switch] Blocked ${action} for ${sellerName}`, {
       sellerId,

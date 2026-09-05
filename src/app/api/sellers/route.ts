@@ -37,6 +37,6 @@ export async function GET(request: Request) {
     llmConfigured: isLlmConfigured(),
     anthropicWorkspaceConfigured: Boolean(getAnthropicWorkspaceId()),
     razorpayConfigured: isRazorpayConfigured(),
-    paymentsKilled: isPaymentsKilled(),
+    paymentsKilled: await isPaymentsKilled(),
   });
 }

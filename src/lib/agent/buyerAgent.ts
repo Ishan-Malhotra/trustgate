@@ -87,7 +87,7 @@ export async function runBuyerAgent(
   userMessage: string,
   userPolicy?: UserPolicy
 ): Promise<PurchaseRequestResult> {
-  if (isPaymentsKilled()) {
+  if (await isPaymentsKilled()) {
     logAudit("refusal", `[kill-switch] Stopped buyer agent for: ${userMessage}`);
     return {
       response: KILL_SWITCH_MESSAGE,

@@ -124,10 +124,11 @@
 - **Done:** `src/lib/gst/validateGstin.ts` — format + mod-36 checksum (no network)
 - **Done:** `src/lib/gst/verifyGstin.ts` — portal/proxy lookup, session cache, soft fail → format-only when portal blocked
 - **Done:** `applyGstConfidenceOverlay` — GST Active / cancelled overlays MCA confidence (not shopping-side trust)
+- **Fix (2026-09-05):** Active GST on an MCA miss stays **low-band** (trial hold ₹200). It no longer promotes to medium, which used to fall through to capture. Active GST also cannot clear MCA elevated risk. `evaluateTrust` holds any low effective tier that is not high-registry-verified.
 - **Done:** Live lookup bridge — MCA miss + GSTIN → verify GST → retry MCA with legal name; catalog passes `candidate.gstin`
 - **Done:** Audit `[gst]` + progress log; tool `lookupUnknownMerchant` accepts optional `gstin`
 - **Env:** optional `GST_VERIFY_URL` (portal often blocked from servers)
-- **Tests:** validate/verify/overlay + MCA-miss→GST-legal-name→MCA-hit bridge
+- **Tests:** validate/verify/overlay (MCA miss stays low) + MCA-miss→GST-legal-name→MCA-hit + GST-Active-but-MCA-still-miss holds
 - **Note:** IndiaMART search rows often lack GSTIN — bridge helps only when GSTIN is present
 
 
@@ -158,10 +159,12 @@
 
 ## Kill switch — stop all autonomous payments
 
-- **Done:** `src/lib/config/killSwitch.ts` + `/api/kill-switch` — one toggle disables payments instantly
+- **Done:** `src/lib/config/killSwitch.ts` + `/api/kill-switch` — one toggle disables payments
+- **Fix (2026-09-05):** Flag is no longer `globalThis`. Shared store: Upstash Redis key `trustgate:payments_killed` (Vercel), else `data/kill-switch.json` (local). `isPaymentsKilled` / `assertPaymentsAllowed` **read the store on every call** — no in-process cache. Redis read failure fail-closes (treat as killed).
 - **Done:** Blocks `/api/purchase` agent runs, `authorizeOrCapture`, and `executeApprovedPayment`
 - **Done:** Header button “Stop all payments” / “Resume payments” + status banner; audit `[kill-switch]`
-- **Tests:** killSwitch unit tests
+- **Tests:** engage/release; two isolated memory stores do **not** share (old bug); two instances on one shared cell / mocked Redis **do** share; Redis throw → fail closed
+- **Env:** `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` required for a genuine cross-instance kill on Vercel
 
 
 

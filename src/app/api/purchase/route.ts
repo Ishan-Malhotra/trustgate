@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     ? setUserPolicy(parsed.data.userPolicy)
     : undefined;
 
-  if (isPaymentsKilled()) {
+  if (await isPaymentsKilled()) {
     logAudit("refusal", `[kill-switch] Stopped agent for: ${parsed.data.message}`);
     return NextResponse.json({
       response: KILL_SWITCH_MESSAGE,

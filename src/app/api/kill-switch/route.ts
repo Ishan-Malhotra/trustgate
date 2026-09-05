@@ -14,9 +14,10 @@ export async function GET(request: Request) {
   const denied = denyUnlessControlAccess(request)
   if (denied) return denied
 
+  const paymentsKilled = await isPaymentsKilled()
   return NextResponse.json({
-    paymentsKilled: isPaymentsKilled(),
-    paymentsEnabled: !isPaymentsKilled(),
+    paymentsKilled,
+    paymentsEnabled: !paymentsKilled,
   })
 }
 
@@ -34,7 +35,7 @@ export async function PUT(request: Request) {
     )
   }
 
-  const paymentsKilled = setPaymentsKilled(parsed.data.killed)
+  const paymentsKilled = await setPaymentsKilled(parsed.data.killed)
   return NextResponse.json({
     paymentsKilled,
     paymentsEnabled: !paymentsKilled,

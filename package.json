@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.46",
+    "@upstash/redis": "^1.38.4",
     "ai": "^7.0.84",
     "next": "16.3.3",
     "razorpay": "^2.9.8",

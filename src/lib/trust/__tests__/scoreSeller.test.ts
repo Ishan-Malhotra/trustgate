@@ -7,6 +7,8 @@ import { sellerFromMca } from "@/lib/registry/sellerFromMca";
 import { computeConfidence } from "@/lib/trust/confidence";
 import type { MCARecord } from "@/lib/registry/mcaLookup";
 import type { Seller } from "@/lib/types";
+import { applyGstConfidenceOverlay } from "@/lib/gst/applyGstConfidence";
+import type { GstTaxpayerRecord } from "@/lib/gst/verifyGstin";
 
 describe("scoreSeller", () => {
   const sellers = getAllSellers();
@@ -185,7 +187,7 @@ describe("evaluateTrust with confidence", () => {
     expect(decision.riskScore).toBe(decision.effectiveScore);
   });
 
-  it("high confidence young merchant with low risk score captures, not refuses", () => {
+  it("young MCA merchant with low risk score holds, not captures", () => {
     const seller = sellerFromMca("Young Active Co", {
       cin: "U12345",
       companyName: "YOUNG ACTIVE CO",
@@ -220,8 +222,9 @@ describe("evaluateTrust with confidence", () => {
     expect(confidence.band).toBe("medium");
 
     const decision = evaluateTrust(seller, 250, confidence);
-    expect(decision.action).not.toBe("refuse");
+    expect(decision.action).toBe("hold");
     expect(decision.spendLimit).toBeGreaterThan(0);
+    expect(decision.trustReason).toContain("not eligible for automatic capture");
   });
 
   it("Infosys ₹500 captures with effective high tier", () => {
@@ -265,6 +268,27 @@ describe("evaluateTrust with confidence", () => {
     expect(decision.riskScore).toBe(decision.effectiveScore);
     expect(decision.effectiveTier).not.toBe("high");
     expect(["refuse", "hold"]).toContain(decision.action);
+  });
+
+  it("GST Active overlay on MCA miss holds at trial cap, never captures", () => {
+    const seller = sellerFromMca("Anax Impex", null);
+    const gst: GstTaxpayerRecord = {
+      gstin: "27AADCB2230M1ZT",
+      legalName: "ANAX IMPEX PRIVATE LIMITED",
+      tradeName: "Anax Impex",
+      status: "Active",
+      statusNormalized: "active",
+      registrationDate: "01/01/2018",
+      source: "portal",
+      validation: { ok: true, gstin: "27AADCB2230M1ZT" },
+    };
+    const confidence = applyGstConfidenceOverlay(computeConfidence(null), gst);
+    const decision = evaluateTrust(seller, 500, confidence);
+
+    expect(confidence.band).toBe("low");
+    expect(decision.action).toBe("hold");
+    expect(decision.spendLimit).toBe(LIVE_TRIAL_SPEND_LIMIT);
+    expect(decision.effectiveAmount).toBe(LIVE_TRIAL_SPEND_LIMIT);
   });
 
   it("gaming seller unchanged without confidence", () => {
