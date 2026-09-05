@@ -1,19 +1,15 @@
 import { logAudit } from "@/lib/audit/logger"
 import { getDataGovInApiKey } from "@/lib/config/env"
+import {
+  buildFuzzyNameCandidates,
+  pickBestFuzzyMatch,
+} from "@/lib/registry/fuzzyCompanyName"
 
 const MCA_RESOURCE_ID = "4dbe5667-7b6b-41d7-82af-211562424d9a"
 const MCA_API_BASE = `https://api.data.gov.in/resource/${MCA_RESOURCE_ID}`
 const PUBLIC_SAMPLE_KEY =
   "579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b"
 const REQUEST_TIMEOUT_MS = 8000
-
-const NAME_SUFFIXES = [
-  "LIMITED",
-  "PRIVATE LIMITED",
-  "PVT LTD",
-  "LTD",
-  "LLP",
-] as const
 
 const CIN_PATTERN = /^[A-Z]{1}[0-9]{5}[A-Z]{2}[0-9]{4}[A-Z]{3}[0-9]{6}$/
 
@@ -37,6 +33,9 @@ export interface McaLookupResult {
   record: MCARecord | null
   source: McaLookupSource
   failureReason?: McaLookupFailure
+  /** How the name was matched when a record is found. */
+  matchKind?: "exact" | "fuzzy"
+  matchScore?: number
 }
 
 interface McaApiRecord {
@@ -119,19 +118,6 @@ function isCin(input: string): boolean {
 
 function normalizeCompanyName(name: string): string {
   return name.trim().toUpperCase().replace(/\s+/g, " ")
-}
-
-function buildNameCandidates(name: string): string[] {
-  const base = normalizeCompanyName(name)
-  const candidates = new Set<string>([base])
-
-  for (const suffix of NAME_SUFFIXES) {
-    if (!base.endsWith(suffix)) {
-      candidates.add(`${base} ${suffix}`)
-    }
-  }
-
-  return [...candidates]
 }
 
 function pickBestRecord(records: MCARecord[]): MCARecord | null {
@@ -230,17 +216,39 @@ async function fetchMcaRecords(
   }
 }
 
-async function queryByName(name: string): Promise<FetchOutcome> {
-  const candidates = buildNameCandidates(name)
+async function queryByName(name: string): Promise<
+  | { kind: "records"; records: MCARecord[]; matchKind: "exact" | "fuzzy"; matchScore: number }
+  | { kind: "no-match" }
+  | { kind: "api-error"; status?: number }
+  | { kind: "timeout" }
+> {
+  const candidates = buildFuzzyNameCandidates(name)
+  const originalNorm = normalizeCompanyName(name)
 
   for (const candidate of candidates) {
     const outcome = await fetchMcaRecords("CompanyName", candidate)
-    if (outcome.kind === "records") {
-      const best = pickBestRecord(outcome.records)
-      if (best) return { kind: "records", records: [best] }
-    }
     if (outcome.kind === "api-error" || outcome.kind === "timeout") {
       return outcome
+    }
+    if (outcome.kind !== "records") continue
+
+    const fuzzy = pickBestFuzzyMatch(name, outcome.records)
+    if (!fuzzy) {
+      // API returned something but names are too different — keep searching
+      continue
+    }
+
+    const score = fuzzy.score
+    const registryNorm = normalizeCompanyName(fuzzy.record.companyName)
+    const isExact =
+      candidates.includes(registryNorm) &&
+      (registryNorm === originalNorm || score >= 0.99)
+
+    return {
+      kind: "records",
+      records: [fuzzy.record],
+      matchKind: isExact ? "exact" : "fuzzy",
+      matchScore: score,
     }
   }
 
@@ -259,12 +267,18 @@ async function queryByCin(cin: string): Promise<FetchOutcome> {
 function outcomeToResult(
   outcome: FetchOutcome,
   queryName: string,
-  source: McaLookupSource
+  source: McaLookupSource,
+  matchMeta?: { matchKind: "exact" | "fuzzy"; matchScore: number }
 ): McaLookupResult {
   if (outcome.kind === "records") {
     const record = outcome.records[0]
     storeVerifiedRecord(record, queryName)
-    return { record, source }
+    return {
+      record,
+      source,
+      matchKind: matchMeta?.matchKind,
+      matchScore: matchMeta?.matchScore,
+    }
   }
 
   if (outcome.kind === "no-match") {
@@ -321,14 +335,17 @@ export async function searchCompanyDetailed(
       return { record: cinFallback, source: "verified-cache" }
     }
   } else {
-    outcome = await queryByName(trimmed)
+    const nameOutcome = await queryByName(trimmed)
 
-    if (outcome.kind === "no-match") {
+    if (nameOutcome.kind === "no-match") {
       const cachedCin = getNameToCinCache().get(cacheKey)
       if (cachedCin) {
         const cinOutcome = await queryByCin(cachedCin)
         if (cinOutcome.kind === "records") {
-          const result = outcomeToResult(cinOutcome, trimmed, "api")
+          const result = outcomeToResult(cinOutcome, trimmed, "api", {
+            matchKind: "exact",
+            matchScore: 1,
+          })
           logAudit(
             "trust_check",
             `[live-lookup] Found ${result.record!.companyName} via CIN retry (${cachedCin})`,
@@ -346,28 +363,48 @@ export async function searchCompanyDetailed(
       }
     }
 
-    if (outcome.kind === "records") {
-      const result = outcomeToResult(outcome, trimmed, "api")
+    if (nameOutcome.kind === "records") {
+      const result = outcomeToResult(
+        { kind: "records", records: nameOutcome.records },
+        trimmed,
+        "api",
+        {
+          matchKind: nameOutcome.matchKind,
+          matchScore: nameOutcome.matchScore,
+        }
+      )
+      const fuzzyNote =
+        nameOutcome.matchKind === "fuzzy"
+          ? ` [fuzzy score ${nameOutcome.matchScore.toFixed(2)}]`
+          : ""
       logAudit(
         "trust_check",
-        `[live-lookup] Found ${result.record!.companyName} (${result.record!.cin}) — ${result.record!.status}`,
-        { cin: result.record!.cin, status: result.record!.status }
+        `[live-lookup] Found ${result.record!.companyName} (${result.record!.cin}) — ${result.record!.status}${fuzzyNote}`,
+        {
+          cin: result.record!.cin,
+          status: result.record!.status,
+          matchKind: nameOutcome.matchKind,
+          matchScore: nameOutcome.matchScore,
+          query: trimmed,
+        }
       )
       return result
     }
 
-    if (outcome.kind === "api-error" || outcome.kind === "timeout") {
+    if (nameOutcome.kind === "api-error" || nameOutcome.kind === "timeout") {
       const fallback = getFromVerifiedCache(trimmed)
       if (fallback) {
         logAudit(
           "trust_check",
-          `[live-lookup] Verified cache fallback after ${outcome.kind} for "${trimmed}"`,
-          { cin: fallback.cin, failureReason: outcome.kind }
+          `[live-lookup] Verified cache fallback after ${nameOutcome.kind} for "${trimmed}"`,
+          { cin: fallback.cin, failureReason: nameOutcome.kind }
         )
         return { record: fallback, source: "verified-cache" }
       }
-      return outcomeToResult(outcome, trimmed, "api")
+      return outcomeToResult(nameOutcome, trimmed, "api")
     }
+
+    outcome = nameOutcome
   }
 
   const result = outcomeToResult(outcome, trimmed, "api")

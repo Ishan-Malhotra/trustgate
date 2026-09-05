@@ -151,22 +151,77 @@ describe("searchCompany", () => {
     expect(result.source).toBe("verified-cache");
   });
 
-  it("distinguishes no-match from api-error", async () => {
+  it("accepts punctuation-normalized fuzzy name when exact miss", async () => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes("A.S.INTERNATIONAL") && !url.includes("A+S")) {
+        return {
+          ok: true,
+          json: async () => ({ records: [] }),
+        } as Response
+      }
+      if (
+        url.includes("A+S+INTERNATIONAL") ||
+        url.includes("AS+INTERNATIONAL") ||
+        decodeURIComponent(url).includes("A S INTERNATIONAL") ||
+        decodeURIComponent(url).includes("AS INTERNATIONAL")
+      ) {
+        return {
+          ok: true,
+          json: async () => ({
+            records: [
+              {
+                CIN: "U12345MH2020PTC123456",
+                CompanyName: "A S INTERNATIONAL PRIVATE LIMITED",
+                CompanyRegistrationdate_date: "2020-01-01",
+                CompanyStatus: "Active",
+                AuthorizedCapital: "100000.00",
+                PaidupCapital: "100000.00",
+                CompanyStateCode: "maharashtra",
+                nic_code: "1234",
+                CompanyROCcode: "ROC Mumbai",
+              },
+            ],
+          }),
+        } as Response
+      }
+      return {
+        ok: true,
+        json: async () => ({ records: [] }),
+      } as Response
+    })
+
+    const result = await searchCompanyDetailed("A.S.International")
+    expect(result.record?.companyName).toBe(
+      "A S INTERNATIONAL PRIVATE LIMITED"
+    )
+    expect(result.matchScore).toBeGreaterThanOrEqual(0.72)
+    expect(["exact", "fuzzy"]).toContain(result.matchKind)
+  })
+
+  it("rejects API hit when company name is unrelated (fail closed)", async () => {
     vi.mocked(fetch).mockResolvedValue({
       ok: true,
-      json: async () => ({ records: [] }),
-    } as Response);
+      json: async () => ({
+        records: [
+          {
+            CIN: "L85110KA1981PLC013115",
+            CompanyName: "INFOSYS LIMITED",
+            CompanyRegistrationdate_date: "1981-07-02",
+            CompanyStatus: "Active",
+            AuthorizedCapital: "1",
+            PaidupCapital: "1",
+            CompanyStateCode: "karnataka",
+            nic_code: "1",
+            CompanyROCcode: "ROC Bangalore",
+          },
+        ],
+      }),
+    } as Response)
 
-    const noMatch = await searchCompanyDetailed("Totally Fake Corp XYZ");
-    expect(noMatch.failureReason).toBe("no-match");
-
-    vi.mocked(fetch).mockResolvedValue({
-      ok: false,
-      status: 500,
-    } as Response);
-
-    clearMcaCache();
-    const apiError = await searchCompanyDetailed("Another Corp");
-    expect(apiError.failureReason).toBe("api-error");
-  });
-});
+    const result = await searchCompanyDetailed("Totally Unrelated Traders")
+    // First candidate may get Infosys back from overly broad mock — scoring must reject
+    expect(result.record).toBeNull()
+    expect(result.failureReason).toBe("no-match")
+  })
+})

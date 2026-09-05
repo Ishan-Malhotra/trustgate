@@ -118,3 +118,24 @@
 - **Done:** Blocks `/api/purchase` agent runs, `authorizeOrCapture`, and `executeApprovedPayment`
 - **Done:** Header button “Stop all payments” / “Resume payments” + status banner; audit `[kill-switch]`
 - **Tests:** killSwitch unit tests
+
+## Fuzzy MCA name matching
+- **Done:** `src/lib/registry/fuzzyCompanyName.ts` — normalize punctuation/initials, build query variants, similarity score (min 0.72)
+- **Done:** `mcaLookup.queryByName` uses fuzzy candidates; rejects weak API hits (fail closed)
+- **Done:** Audit logs fuzzy score when matchKind is fuzzy
+- **Tests:** fuzzyCompanyName unit tests + mcaLookup punctuation / reject-unrelated cases
+- **Limit:** still cannot invent a legal name from an unrelated trade name without GSTIN
+
+## Payment + control-plane hardening
+- **Why:** Catalog HOLD / confirmation was prompt-only; `authorizeOrCapture` could capture a HOLD seller, reuse another seller’s decision, and public APIs were unauthenticated
+- **Done:** `src/lib/agent/assertPaymentAuthorized.ts` — action must match stored TrustGate decision (`capture` cannot override `hold`); refuse / spend limit still fail closed
+- **Done:** ShoppingAgent writes `lastShoppingStatus` on context; `requires_confirmation` / `no_viable` / `no_suppliers` cannot call `authorizeOrCapture` in that same request; catalog `authorized` pays only the chosen seller
+- **Done:** No `lastDecision` fallback — payment needs `decisionsBySellerId[sellerId]`
+- **Done:** Seed HOLD path unchanged (coffee tasting still holds via `action: "hold"` when there is no catalog shopping status)
+- **Done:** `sanitizeUntrustedText` — IndiaMART names flattened at map-time and in shopping summaries (no injected “Status: authorized” lines)
+- **Done:** Control plane — `controlAuth.ts` + `src/proxy.ts` + `/api/auth` + ControlGate UI
+  - Local `next dev`: open (no extra env)
+  - Vercel production/preview: fail closed without `TRUSTGATE_CONTROL_SECRET` (503); with secret, unlock once (httpOnly cookie) or send `x-trustgate-secret`
+- **Done:** Audit `[payment-gate]` when the tool is blocked
+- **Tests:** assertPaymentAuthorized, sanitizeUntrustedText, controlAuth, shoppingAgent context persist + newline flattening, IndiaMART name sanitize
+- **Not a real user-account system** — demo password for the public URL only
