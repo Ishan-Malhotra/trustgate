@@ -219,3 +219,8 @@
 - Covers: local run + env, UI panels, demo chips, editable policy, kill switch, decision pipeline (score → confidence/GST → evaluateTrust → policy → payment gate), three entry paths, catalog HOLD vs seed HOLD, full API table including auth / config / kill-switch
 - Corrected: fuzzy MCA **is** shipped; GST Active on MCA miss stays trial hold; `TRUSTGATE_CONTROL_SECRET` + Upstash kill-switch env documented
 
+## FLOW.md — Mermaid flowcharts
+
+- **Done:** [FLOW.md](./FLOW.md) — entire request, seed / live MCA / catalog, `evaluateTrust` first-match, policy downgrade, payment gate
+- Linked from README “How it works”
+

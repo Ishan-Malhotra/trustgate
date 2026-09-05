@@ -105,6 +105,8 @@ If every purchase says the kill switch is engaged, you left it on from a prior s
 
 ## How it works
 
+Flowcharts (Mermaid): [FLOW.md](./FLOW.md).
+
 ```
 User message
   → Control plane (open locally; locked on Vercel without secret)
@@ -219,5 +221,6 @@ curl -X POST https://YOUR_DEPLOYMENT/api/purchase \
 ## Repo
 
 - GitHub: https://github.com/Ishan-Malhotra/trustgate
+- Flowcharts: [FLOW.md](./FLOW.md)
 - Demo prep / file map: [PREP.md](./PREP.md)
 - Build phase log: [logs.md](./logs.md)
