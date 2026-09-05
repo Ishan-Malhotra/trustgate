@@ -77,7 +77,7 @@ export function applyShoppingDecision(
     const summary =
       evaluation.summary ??
       `No suppliers found in the catalog for "${query}".`
-    persistShoppingGate(ctx, "no_suppliers")
+    persistShoppingGate(ctx, "no_suppliers", undefined, [])
     return {
       status: "no_suppliers",
       query,
@@ -103,7 +103,12 @@ export function applyShoppingDecision(
 
   const cheapestCapture = pickCheapestByPrice(approved)
   if (cheapestCapture) {
-    persistShoppingGate(ctx, "authorized", cheapestCapture.sellerId)
+    persistShoppingGate(
+      ctx,
+      "authorized",
+      cheapestCapture.sellerId,
+      catalogSellerIdsFrom(candidates, cheapestCapture.sellerId)
+    )
     const summary = buildAuthorizedSummary(
       query,
       cheapestCapture,
@@ -131,7 +136,12 @@ export function applyShoppingDecision(
 
   const cheapestHold = pickCheapestByPrice(holds)
   if (cheapestHold) {
-    persistShoppingGate(ctx, "requires_confirmation", cheapestHold.sellerId)
+    persistShoppingGate(
+      ctx,
+      "requires_confirmation",
+      cheapestHold.sellerId,
+      catalogSellerIdsFrom(candidates, cheapestHold.sellerId)
+    )
     const summary = buildRequiresConfirmationSummary(
       query,
       cheapestHold,
@@ -156,7 +166,12 @@ export function applyShoppingDecision(
     }
   }
 
-  persistShoppingGate(ctx, "no_viable")
+  persistShoppingGate(
+    ctx,
+    "no_viable",
+    undefined,
+    catalogSellerIdsFrom(candidates)
+  )
   const summary = buildNoViableSummary(query, candidates, budgetNote)
   return {
     status: "no_viable",
@@ -176,12 +191,27 @@ export function applyShoppingDecision(
 function persistShoppingGate(
   ctx: AgentContext | undefined,
   status: CatalogSearchStatus,
-  chosenSellerId?: string
+  chosenSellerId?: string,
+  catalogSellerIds?: string[]
 ) {
   if (!ctx) return
   ctx.lastShoppingStatus = status
   ctx.lastShoppingChosenSellerId = chosenSellerId
+  ctx.lastShoppingSellerIds = catalogSellerIds
   if (chosenSellerId) ctx.chosenSellerId = chosenSellerId
+}
+
+function catalogSellerIdsFrom(
+  rows: CatalogEvaluatedCandidate[],
+  chosenSellerId?: string
+): string[] {
+  const ids: string[] = []
+  const add = (id: string | undefined) => {
+    if (id && !ids.includes(id)) ids.push(id)
+  }
+  for (const row of rows) add(row.sellerId)
+  add(chosenSellerId)
+  return ids
 }
 
 function displayName(name: string): string {

@@ -13,7 +13,7 @@ TrustGate is past the seed-catalog demo. It now:
 1. **Finds deals** via IndiaMART (`search_catalog` / ShoppingAgent) — shopping is untrusted
 2. **Independently evaluates proposals** — product integrity → price integrity → seller MCA/GST/trust → user policy
 3. **Ranks CAPTURE-first** — HOLD is recommendation only (`requires_confirmation`), never auto-purchase
-4. **Enforces that on the server** — `authorizeOrCapture` cannot capture a HOLD seller, cannot pay a catalog HOLD in the same request, and cannot reuse another seller’s decision
+4. **Enforces that on the server** — `authorizeOrCapture` cannot capture a HOLD seller, cannot pay a catalog HOLD candidate, and cannot reuse another seller’s decision. Seed / live-lookup payments are not locked by leftover catalog status
 5. **Warns** when shopping hallucinates or keeps proposing bad deals (`[warning]` banner)
 6. **Kill switch** — one header button stops all autonomous payments and agent purchase runs instantly
 7. **Control plane** — local demo stays open; Vercel production/preview is locked unless `TRUSTGATE_CONTROL_SECRET` is set
@@ -255,13 +255,13 @@ Claude (via Vercel AI SDK + Anthropic) with a system prompt that includes the pu
 | `checkTrust` | Seed catalog sellers | `evaluateTrust` + `applyUserPolicy`, logs trust + policy |
 | `lookupUnknownMerchant` | Real company not in seed data | MCA lookup → synthetic seller → confidence → same gates + reasoning chain |
 | `search_catalog` | Product goal **not** covered by seed listings | IndiaMART → product/price integrity → seller TrustGate → ShoppingAgent CAPTURE-first (`authorized` / `requires_confirmation` / `no_viable`) |
-| `authorizeOrCapture` | After a check | Server-enforced: exact seller decision, action must match TrustGate (`capture` cannot override `hold`), catalog `requires_confirmation` cannot pay in the same request |
+| `authorizeOrCapture` | After a check | Server-enforced: exact seller decision, action must match TrustGate (`capture` cannot override `hold`); catalog `requires_confirmation` cannot pay catalog candidates (seed / live-lookup still can) |
 | `refuse` | Agent chooses not to pay | Logs refusal; no Razorpay |
 
 Rules baked into the prompt **and enforced on the server**:
 - Always check trust / lookup before paying — `authorizeOrCapture` requires `decisionsBySellerId[sellerId]` (no `lastDecision` fallback)
 - Payment `action` must equal the stored TrustGate action (`capture` on a HOLD seller is rejected)
-- Catalog `requires_confirmation` / `no_viable` / `no_suppliers` cannot call payment tools in that request
+- Catalog `requires_confirmation` / `no_viable` / `no_suppliers` cannot pay **catalog-search** sellers; leftover status does not block seed / independent live-lookup payments
 - Never invent a seed id for an unknown merchant
 - Don’t refuse just because a merchant is “new” — use confidence
 - Follow `recommendedAction` from the tools
@@ -326,12 +326,12 @@ Files: `src/lib/config/controlAuth.ts`, `src/proxy.ts`, `src/app/api/auth/route.
 `assertPaymentAuthorized` runs inside `authorizeOrCapture` before any Razorpay call:
 
 1. Must have a stored decision for **this** `sellerId` (no `lastDecision` fallback)
-2. Catalog status `requires_confirmation` / `no_viable` / `no_suppliers` → block payment in that same request
-3. Catalog `authorized` → capture only the chosen seller
+2. Catalog status applies only to sellers from that search (`lastShoppingSellerIds`). `requires_confirmation` / `no_viable` / `no_suppliers` cannot pay those catalog sellers; leftover status does **not** block seed-catalog or independent live-lookup payments
+3. Catalog `authorized` → capture only the chosen catalog seller (other catalog candidates still blocked)
 4. Tool `action` must equal TrustGate’s stored action (`capture` cannot override `hold`)
 5. Respect spend limit / refuse
 
-Audit tag: `[payment-gate]`. Seed-catalog HOLDs (coffee tasting) still pay with `action: "hold"` because there is no catalog shopping status on that path.
+Audit tag: `[payment-gate]`. Seed-catalog HOLDs (coffee tasting) still pay with `action: "hold"` — including after a prior `search_catalog` in the same request, as long as that seller was not a catalog candidate.
 
 Catalog merchant names are sanitized (`sanitizeUntrustedText`) so a listing cannot inject extra “Status: authorized” lines into the model’s tool output.
 
@@ -357,7 +357,7 @@ Files:
 - `src/lib/catalog/types.ts` — provider-agnostic candidate + search result + integrity fields
 - `src/lib/catalog/providers/indiamart.ts` — Apify IndiaMART actor (default `sourabhbgp~indiamart-scraper`), session cache, never invents suppliers; merchant names sanitized
 - `src/lib/catalog/searchCatalog.ts` — search + TrustGate proposal evaluation
-- `src/lib/agent/shoppingAgent.ts` — CAPTURE-first ranking + writes `lastShoppingStatus` for the payment gate
+- `src/lib/agent/shoppingAgent.ts` — CAPTURE-first ranking + writes `lastShoppingStatus` / `lastShoppingSellerIds` for the payment gate
 - `src/lib/agent/lookupUnknownMerchant.ts` — shared TrustGate live path used by tool + catalog
 - `src/lib/trustgate/` — proposal integrity harness
 
@@ -572,3 +572,4 @@ PREP.md                    this file — demo prep reference
 | 2026-09-05 | Fuzzy MCA: normalized name variants + similarity gate in `fuzzyCompanyName.ts` / `mcaLookup.ts` |
 | 2026-09-05 | Price anomaly: batch-only peers, min pool 5, soft signal (never standalone refuse); explanation multi-reason ordered list |
 | 2026-09-05 | Payment + control-plane hardening: server `assertPaymentAuthorized`, catalog HOLD cannot auto-pay, no lastDecision fallback, catalog name sanitization, ControlGate / `TRUSTGATE_CONTROL_SECRET` (local open, Vercel fail-closed) |
+| 2026-09-05 | Catalog payment gate scoped to `lastShoppingSellerIds` — leftover `authorized` status no longer blocks seed / live-lookup sellers |

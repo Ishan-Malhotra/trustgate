@@ -15,6 +15,8 @@ export interface AgentContext {
   /** Last catalog shopping status in this request — enforced by authorizeOrCapture. */
   lastShoppingStatus?: CatalogSearchStatus
   lastShoppingChosenSellerId?: string
+  /** Seller ids evaluated in the last catalog search — shopping gate applies only to these. */
+  lastShoppingSellerIds?: string[]
 }
 
 export function storeTrustDecision(

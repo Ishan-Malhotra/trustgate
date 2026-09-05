@@ -188,15 +188,15 @@
 
 - **Why:** Catalog HOLD / confirmation was prompt-only; `authorizeOrCapture` could capture a HOLD seller, reuse another seller’s decision, and public APIs were unauthenticated
 - **Done:** `src/lib/agent/assertPaymentAuthorized.ts` — action must match stored TrustGate decision (`capture` cannot override `hold`); refuse / spend limit still fail closed
-- **Done:** ShoppingAgent writes `lastShoppingStatus` on context; `requires_confirmation` / `no_viable` / `no_suppliers` cannot call `authorizeOrCapture` in that same request; catalog `authorized` pays only the chosen seller
+- **Done:** ShoppingAgent writes `lastShoppingStatus` + `lastShoppingSellerIds` on context; catalog constraints apply only to those sellers. `requires_confirmation` / `no_viable` / `no_suppliers` cannot pay catalog candidates; catalog `authorized` pays only the chosen catalog seller. Seed / independent live-lookup payments are not locked by leftover shopping status
 - **Done:** No `lastDecision` fallback — payment needs `decisionsBySellerId[sellerId]`
-- **Done:** Seed HOLD path unchanged (coffee tasting still holds via `action: "hold"` when there is no catalog shopping status)
+- **Done:** Seed HOLD path unchanged (coffee tasting still holds via `action: "hold"` even if a prior catalog search ran in the same request)
 - **Done:** `sanitizeUntrustedText` — IndiaMART names flattened at map-time and in shopping summaries (no injected “Status: authorized” lines)
 - **Done:** Control plane — `controlAuth.ts` + `src/proxy.ts` + `/api/auth` + ControlGate UI
   - Local `next dev`: open (no extra env)
   - Vercel production/preview: fail closed without `TRUSTGATE_CONTROL_SECRET` (503); with secret, unlock once (httpOnly cookie) or send `x-trustgate-secret`
 - **Done:** Audit `[payment-gate]` when the tool is blocked
-- **Tests:** assertPaymentAuthorized, sanitizeUntrustedText, controlAuth, shoppingAgent context persist + newline flattening, IndiaMART name sanitize
+- **Tests:** assertPaymentAuthorized (catalog lock does not apply to seed / independent live-lookup), sanitizeUntrustedText, controlAuth, shoppingAgent context persist + newline flattening, IndiaMART name sanitize
 - **Not a real user-account system** — demo password for the public URL only
 
 

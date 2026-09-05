@@ -9,6 +9,8 @@ export interface PaymentAuthorizationInput {
   decision: FinalDecision | undefined
   shoppingStatus?: CatalogSearchStatus
   shoppingChosenSellerId?: string
+  /** Seller ids from the last catalog search. Independent seed / live-lookup payments omit this constraint. */
+  shoppingCatalogSellerIds?: string[]
 }
 
 export type PaymentAuthorizationResult =
@@ -29,6 +31,7 @@ export function assertPaymentAuthorized(
     decision,
     shoppingStatus,
     shoppingChosenSellerId,
+    shoppingCatalogSellerIds,
   } = input
 
   if (!decision || decision.tier === undefined) {
@@ -42,9 +45,10 @@ export function assertPaymentAuthorized(
     sellerId,
     action,
     shoppingStatus,
-    shoppingChosenSellerId
+    shoppingChosenSellerId,
+    shoppingCatalogSellerIds
   )
-  if (!shoppingBlock.ok) return shoppingBlock
+  if (shoppingBlock) return shoppingBlock
 
   if (decision.action === "refuse") {
     return { ok: false, error: "Payment refused by trust/policy gates" }
@@ -67,14 +71,25 @@ export function assertPaymentAuthorized(
   return { ok: true, payAmount: decision.effectiveAmount }
 }
 
+/**
+ * Catalog-layer payment gate. Returns an error to block, or null so the
+ * caller can continue and use `decision.effectiveAmount` — never a dummy ₹0.
+ */
 function assertShoppingAllowsPayment(
   sellerId: string,
   action: "capture" | "hold",
   shoppingStatus?: CatalogSearchStatus,
-  shoppingChosenSellerId?: string
-): PaymentAuthorizationResult {
+  shoppingChosenSellerId?: string,
+  shoppingCatalogSellerIds?: string[]
+): { ok: false; error: string } | null {
   if (!shoppingStatus) {
-    return { ok: true, payAmount: 0 }
+    return null
+  }
+
+  // Catalog status is not a request-wide lock. After search_catalog, the agent
+  // may still pay a seed seller or an independent live-lookup merchant.
+  if (isIndependentOfCatalogSearch(sellerId, shoppingCatalogSellerIds)) {
+    return null
   }
 
   if (shoppingStatus === "no_suppliers" || shoppingStatus === "no_viable") {
@@ -112,5 +127,15 @@ function assertShoppingAllowsPayment(
     }
   }
 
-  return { ok: true, payAmount: 0 }
+  return null
+}
+
+function isIndependentOfCatalogSearch(
+  sellerId: string,
+  shoppingCatalogSellerIds?: string[]
+): boolean {
+  if (!shoppingCatalogSellerIds || shoppingCatalogSellerIds.length === 0) {
+    return false
+  }
+  return !shoppingCatalogSellerIds.includes(sellerId)
 }

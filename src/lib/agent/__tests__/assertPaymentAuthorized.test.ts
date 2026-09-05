@@ -7,7 +7,6 @@ function decision(
   extras?: Partial<FinalDecision>
 ): FinalDecision {
   return {
-    action,
     originalAction: action,
     score: 80,
     tier: "high",
@@ -55,6 +54,16 @@ describe("assertPaymentAuthorized", () => {
       decision: decision("hold", { effectiveAmount: 450 }),
     })
     expect(result).toEqual({ ok: true, payAmount: 450 })
+  })
+
+  it("uses TrustGate effectiveAmount when shopping status is unset", () => {
+    const result = assertPaymentAuthorized({
+      sellerId: "seller-001",
+      amount: 150,
+      action: "capture",
+      decision: decision("capture", { effectiveAmount: 150 }),
+    })
+    expect(result).toEqual({ ok: true, payAmount: 150 })
   })
 
   it("blocks all payment when catalog requires_confirmation", () => {
@@ -115,8 +124,51 @@ describe("assertPaymentAuthorized", () => {
       decision: decision("capture", { effectiveAmount: 120 }),
       shoppingStatus: "authorized",
       shoppingChosenSellerId: "live:chosen",
+      shoppingCatalogSellerIds: ["live:chosen", "live:other"],
     })
     expect(wrongSeller.ok).toBe(false)
+    if (!wrongSeller.ok) {
+      expect(wrongSeller.error).toMatch(/different seller/)
+    }
+  })
+
+  it("does not lock seed-seller payment after catalog authorized another merchant", () => {
+    const result = assertPaymentAuthorized({
+      sellerId: "seller-001",
+      amount: 150,
+      action: "capture",
+      decision: decision("capture", { effectiveAmount: 150 }),
+      shoppingStatus: "authorized",
+      shoppingChosenSellerId: "live:chosen",
+      shoppingCatalogSellerIds: ["live:chosen", "live:other"],
+    })
+    expect(result).toEqual({ ok: true, payAmount: 150 })
+  })
+
+  it("does not lock independent live-lookup payment after catalog authorized", () => {
+    const result = assertPaymentAuthorized({
+      sellerId: "live:mca-unrelated",
+      amount: 200,
+      action: "hold",
+      decision: decision("hold", { effectiveAmount: 200 }),
+      shoppingStatus: "authorized",
+      shoppingChosenSellerId: "live:chosen",
+      shoppingCatalogSellerIds: ["live:chosen", "live:other"],
+    })
+    expect(result).toEqual({ ok: true, payAmount: 200 })
+  })
+
+  it("does not lock seed HOLD after catalog requires_confirmation", () => {
+    const result = assertPaymentAuthorized({
+      sellerId: "seller-001",
+      amount: 450,
+      action: "hold",
+      decision: decision("hold", { effectiveAmount: 450 }),
+      shoppingStatus: "requires_confirmation",
+      shoppingChosenSellerId: "live:conifer",
+      shoppingCatalogSellerIds: ["live:conifer"],
+    })
+    expect(result).toEqual({ ok: true, payAmount: 450 })
   })
 
   it("blocks refuse decisions", () => {

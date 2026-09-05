@@ -217,6 +217,21 @@ describe("applyShoppingDecision / runShoppingAgent", () => {
     )
     expect(ctx.lastShoppingStatus).toBe("requires_confirmation")
     expect(ctx.lastShoppingChosenSellerId).toBe("live:conifer")
+    expect(ctx.lastShoppingSellerIds).toEqual(["live:conifer"])
+  })
+
+  it("persists catalog seller ids so payment gate can ignore seed / live-lookup paths", () => {
+    const ctx = makeCtx()
+    applyShoppingDecision(
+      evaluation([
+        evaluated("Bharat Enterprises", 95, "capture", "live:bharat"),
+        evaluated("Other Arts", 120, "capture", "live:other"),
+      ]),
+      ctx
+    )
+    expect(ctx.lastShoppingStatus).toBe("authorized")
+    expect(ctx.lastShoppingChosenSellerId).toBe("live:bharat")
+    expect(ctx.lastShoppingSellerIds).toEqual(["live:bharat", "live:other"])
   })
 
   it("flattens injected newlines in merchant names in the summary", () => {

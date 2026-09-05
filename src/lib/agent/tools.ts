@@ -145,6 +145,7 @@ export function createBuyerTools(
         decision,
         shoppingStatus: ctx.lastShoppingStatus,
         shoppingChosenSellerId: ctx.lastShoppingChosenSellerId,
+        shoppingCatalogSellerIds: ctx.lastShoppingSellerIds,
       })
       if (!gate.ok) {
         logAudit("refusal", `[payment-gate] ${gate.error}`, {
